@@ -1,0 +1,553 @@
+<title>Separador de Etiquetas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: bancada de expedição — coluna única; entrada (2 docas) → resumo por potes (cartões estilo etiqueta) → conferência */
+:root {
+  --bg: #f3f4f2;
+  --panel: #ffffff;
+  --ink: #16191d;
+  --muted: #5d646c;
+  --line: #d9dcd8;
+  --accent: #1d4fd8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e4ebfd;
+  --bad: #c3261d;   --bad-soft: #fbe7e5;
+  --warn: #a35c00;  --warn-soft: #fcefd9;
+  --ok: #1d7a3e;    --ok-soft: #e1f3e6;
+  --info: #4d5760;  --info-soft: #eceef0;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121417; --panel: #1b1e22; --ink: #eceef0; --muted: #9aa2ab; --line: #2e3339;
+  --accent: #7ea2ff; --accent-ink: #0d1530; --accent-soft: #1d2745;
+  --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f3b35a; --warn-soft: #3a2a14;
+  --ok: #7fd49b; --ok-soft: #173222; --info: #b4bcc4; --info-soft: #262a30; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121417; --panel: #1b1e22; --ink: #eceef0; --muted: #9aa2ab; --line: #2e3339;
+  --accent: #7ea2ff; --accent-ink: #0d1530; --accent-soft: #1d2745;
+  --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f3b35a; --warn-soft: #3a2a14;
+  --ok: #7fd49b; --ok-soft: #173222; --info: #b4bcc4; --info-soft: #262a30; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); padding: 28px 16px 64px; }
+.wrap { width: 100%; max-width: 980px; margin: 0 auto; display: grid; gap: 28px; }
+.stack { display: grid; gap: 18px; min-width: 0; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 850; font-stretch: 85%; letter-spacing: -0.01em; line-height: 1.05; }
+h2 { font-size: 20px; font-weight: 750; font-stretch: 90%; }
+.eyebrow { font: 600 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); max-width: 62ch; margin: 8px 0 0; }
+header { display: grid; gap: 6px; }
+
+.docks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 680px) { .docks { grid-template-columns: 1fr; } }
+.dock { position: relative; background: var(--panel); border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; transition: border-color .15s, background .15s; }
+.dock.over { border-color: var(--accent); background: var(--accent-soft); }
+.dock.filled { border-style: solid; }
+.dock input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.dock:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dock-head { display: flex; align-items: baseline; gap: 10px; }
+.dock-num { font: 800 13px/1 var(--f-mono); color: var(--accent); }
+.dock h3 { font-size: 17px; font-weight: 700; }
+.dock p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; position: relative; z-index: 1; pointer-events: none; }
+.chip { font: 500 12px/1.3 var(--f-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: 600 14px/1 var(--f-body); border-radius: 8px; padding: 11px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button:hover { border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+label.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); cursor: pointer; }
+.status { font: 500 13px/1.4 var(--f-mono); color: var(--muted); }
+.status.err { color: var(--bad); }
+
+.section { display: grid; gap: 14px; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px; }
+.totals { font: 500 13px/1.4 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.totals b { color: var(--ink); }
+
+.carrier { display: grid; gap: 10px; }
+.carrier-name { font: 700 12px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.labels { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.lbl { background: var(--panel); border: 1.5px solid var(--ink); border-radius: 4px; display: grid; grid-template-rows: auto auto 1fr auto; min-width: 0; }
+.lbl-top { background: var(--ink); color: var(--bg); font: 700 10.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; padding: 6px 10px; display: flex; justify-content: space-between; }
+.lbl-big { font-family: var(--f-display); font-weight: 900; font-stretch: 80%; font-size: 46px; line-height: 1; padding: 12px 10px 2px; font-variant-numeric: tabular-nums; }
+.lbl-big small { font-size: 18px; font-weight: 700; font-stretch: 90%; margin-left: 4px; }
+.lbl-meta { font: 400 12px/1.45 var(--f-mono); color: var(--muted); padding: 2px 10px 10px; }
+.lbl button { margin: 0 10px 10px; padding: 8px 10px; font-size: 13px; }
+.lbl.nomatch { border-color: var(--bad); }
+.lbl.nomatch .lbl-top { background: var(--bad); }
+
+.issues { display: grid; gap: 8px; }
+.issue { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.issue .msg { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.issue .where { font: 500 12px/1.4 var(--f-mono); color: var(--muted); display: block; }
+.pill { font: 700 10.5px/1 var(--f-mono); letter-spacing: .08em; padding: 5px 7px; border-radius: 4px; white-space: nowrap; }
+.pill.ALTO { background: var(--bad-soft); color: var(--bad); }
+.pill.MEDIO { background: var(--warn-soft); color: var(--warn); }
+.pill.BAIXO { background: var(--info-soft); color: var(--info); }
+.pill.INFO { background: var(--info-soft); color: var(--info); }
+.pill.OK { background: var(--ok-soft); color: var(--ok); }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+details > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; }
+details > div { padding: 0 14px 14px; display: grid; gap: 8px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: 600 11px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.num { text-align: right; font-family: var(--f-mono); }
+
+.howto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 680px) { .howto { grid-template-columns: 1fr; } }
+.howto div { border-top: 2px solid var(--ink); padding-top: 10px; font-size: 14px; color: var(--muted); }
+.howto b { display: block; color: var(--ink); font-family: var(--f-display); font-size: 16px; font-weight: 750; margin-bottom: 2px; }
+.example-tag { font: 700 10.5px/1 var(--f-mono); letter-spacing: .1em; color: var(--warn); background: var(--warn-soft); padding: 4px 6px; border-radius: 4px; }
+.example { opacity: .8; }
+.foot { color: var(--muted); font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Dose Primal · Expedição</span>
+    <h1>Separador de Etiquetas</h1>
+    <p class="lede">Solte o relatório de pedidos da Yampi e os PDFs de etiquetas do dia. A página casa cada etiqueta com o pedido (CEP + nome), soma os potes (kit + order bump) e devolve um PDF para cada quantidade, além da lista de possíveis erros.</p>
+  </header>
+
+  <div class="docks">
+    <div class="dock" id="dockCsv">
+      <div class="dock-head"><span class="dock-num">1</span><h3>Pedidos da Yampi</h3></div>
+      <p>Exportação de pedidos em <b>.csv</b>. Pode ser dos últimos dias, a página só usa os pedidos que têm etiqueta.</p>
+      <div class="chips" id="chipsCsv"></div>
+      <input type="file" id="inCsv" accept=".csv,text/csv" aria-label="Arquivo CSV da Yampi">
+    </div>
+    <div class="dock" id="dockPdf">
+      <div class="dock-head"><span class="dock-num">2</span><h3>Etiquetas (PDF)</h3></div>
+      <p>Um ou mais PDFs, de qualquer transportadora (J&amp;T, Loggi…). Uma etiqueta por página.</p>
+      <div class="chips" id="chipsPdf"></div>
+      <input type="file" id="inPdf" accept=".pdf,application/pdf" multiple aria-label="PDFs de etiquetas">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="btnRun" disabled>Separar etiquetas</button>
+    <label class="toggle"><input type="checkbox" id="optCarrier" checked> Separar também por transportadora</label>
+    <button id="btnClear">Limpar</button>
+    <span class="status" id="status" role="status"></span>
+  </div>
+
+  <div id="results" hidden class="stack" style="gap:28px">
+    <section class="section">
+      <div class="section-head">
+        <h2>Etiquetas por quantidade de potes</h2>
+        <button class="primary" id="btnZip">Baixar tudo (.zip)</button>
+      </div>
+      <div class="totals" id="totals"></div>
+      <div id="groups" class="stack"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Possíveis erros</h2><span class="totals" id="issueCount"></span></div>
+      <div class="issues" id="issues"></div>
+      <details id="pendDetails"><summary id="pendSummary"></summary><div id="pending"></div></details>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Conferência etiqueta × pedido</h2><button id="btnCsv">Baixar conferência (.csv)</button></div>
+      <div class="tablewrap"><table id="conf"></table></div>
+    </section>
+  </div>
+
+  <section class="section" id="intro">
+    <div class="section-head"><h2>Como funciona</h2></div>
+    <div class="howto">
+      <div><b>Casa pelo CEP</b>Procura na Yampi o pedido com o mesmo CEP da etiqueta e confirma pelo nome do destinatário (tolera nome cortado).</div>
+      <div><b>Soma os potes</b>Kit + order bump do mesmo pedido: kit 3 + bump 1 = 4 potes. Kits: 1, 2, 3, 4, 6, 7, 8, 9.</div>
+      <div><b>Aponta erros</b>Etiqueta duplicada, etiqueta sem pedido, pedido já em transporte, cliente com 2 pedidos, pedido pago sem etiqueta.</div>
+    </div>
+    <div class="section-head"><h3 style="font-size:16px">Resultado</h3><span class="example-tag">EXEMPLO</span></div>
+    <div class="labels example" aria-hidden="true">
+      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>15 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">15 potes no total</div></div>
+      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>10 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">30 potes no total</div></div>
+      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>5 etiq.</span></div><div class="lbl-big">4<small>potes</small></div><div class="lbl-meta">20 potes no total</div></div>
+      <div class="lbl nomatch"><div class="lbl-top"><span>J&amp;T</span><span>2 etiq.</span></div><div class="lbl-big">?<small>sem pedido</small></div><div class="lbl-meta">conferir à mão</div></div>
+    </div>
+  </section>
+
+  <p class="foot">Os arquivos são lidos só no seu navegador; nada é enviado para servidor nenhum.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const KITS = new Set([1, 2, 3, 4, 6, 7, 8, 9]);
+const STATUS_SUSPEITOS = ["em transporte", "entregue", "cancelado", "estornado", "aguardando pagamento", "pagamento recusado", "devolvido"];
+const STATUS_A_ENVIAR = ["faturado", "pagamento aprovado"];
+const $ = (id) => document.getElementById(id);
+const state = { csv: null, pdfs: [], out: null };
+
+/* ---------- utilidades ---------- */
+function tokens(s) {
+  return (s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+}
+function ratio(a, b) { // similaridade estilo SequenceMatcher (bigramas)
+  if (!a || !b) return 0;
+  const bg = (s) => { const m = new Map(); for (let i = 0; i < s.length - 1; i++) { const k = s.slice(i, i + 2); m.set(k, (m.get(k) || 0) + 1); } return m; };
+  const A = bg(a), B = bg(b); let inter = 0;
+  for (const [k, v] of A) inter += Math.min(v, B.get(k) || 0);
+  return (2 * inter) / Math.max(1, a.length + b.length - 2);
+}
+function nameSim(a, b) {
+  const ta = tokens(a), tb = tokens(b);
+  if (!ta.length || !tb.length) return 0;
+  const ja = ta.join(" "), jb = tb.join(" ");
+  if (ja.startsWith(jb) || jb.startsWith(ja)) return 1;
+  const sa = new Set(ta), sb = new Set(tb);
+  let c = 0; for (const t of sa) if (sb.has(t)) c++;
+  return Math.max(ratio(ja, jb), c / Math.min(sa.size, sb.size));
+}
+function coverage(name, text) { // fração dos tokens do nome que aparecem no texto da página
+  const t = tokens(name).filter((x) => x.length > 2);
+  if (!t.length) return 0;
+  const pool = new Set(tokens(text));
+  return t.filter((x) => pool.has(x)).length / t.length;
+}
+function parseCSV(text) {
+  text = text.replace(/^﻿/, "");
+  const first = text.slice(0, text.indexOf("\n"));
+  const sep = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ";" : ",";
+  const rows = []; let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(f); f = ""; }
+    else if (ch === "\n") { row.push(f.replace(/\r$/, "")); rows.push(row); row = []; f = ""; }
+    else f += ch;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  const head = rows.shift().map((h) => h.trim());
+  return rows.filter((r) => r.length > 1).map((r) => Object.fromEntries(head.map((h, i) => [h, (r[i] || "").trim()])));
+}
+const onlyDigits = (s) => (s || "").replace(/\D/g, "");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const potesTxt = (n) => (n === 1 ? "pote" : "potes");
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/* ---------- leitura ---------- */
+function lerPedidos(text) {
+  const rows = parseCSV(text);
+  if (!rows.length || !("numero_pedido" in rows[0])) throw new Error("O CSV não parece ser a exportação de pedidos da Yampi (falta a coluna numero_pedido).");
+  const map = new Map();
+  for (const r of rows) {
+    const k = r.numero_pedido;
+    if (!map.has(k)) map.set(k, {
+      numero: k, cliente: r.cliente, dest: r.entrega_destinatario || r.cliente,
+      cep: onlyDigits(r.entrega_cep).padStart(8, "0"), status: r.status || "", data: (r.data || "").slice(0, 10),
+      numEnd: r.entrega_numero || "", itens: [], potes: 0,
+    });
+    const p = map.get(k), q = parseInt(r.quantidade, 10) || 0;
+    p.itens.push({ q, valor: r.total_item, produto: r.produto });
+    p.potes += q;
+  }
+  return [...map.values()];
+}
+
+async function lerEtiquetas(file, fileIdx) {
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items) {
+      if (!it.str || !it.str.trim()) continue;
+      const y = Math.round(it.transform[5]), x = it.transform[4];
+      let r = rows.find((r) => Math.abs(r.y - y) <= 2);
+      if (!r) rows.push((r = { y, parts: [] }));
+      r.parts.push({ x, s: it.str });
+    }
+    rows.sort((a, b) => b.y - a.y);
+    const lines = rows.map((r) => r.parts.sort((a, b) => a.x - b.x).map((p) => p.s).join(" ").replace(/\s+/g, " ").trim());
+    pages.push(parsePagina(lines, file.name, fileIdx, i - 1));
+  }
+  return { buf, pages };
+}
+
+function parsePagina(lines, fileName, fileIdx, pageIdx) {
+  const text = lines.join("\n");
+  const et = { fileName, fileIdx, pageIdx, lines, text, nome: "", ceps: [], nfe: "", chave: "", rastreio: "", remetente: "", endereco: "" };
+  const di = lines.findIndex((l) => /^destinat[aá]rio/i.test(l));
+  if (di >= 0) {
+    const rest = lines[di].replace(/^destinat[aá]rio\s*:?\s*/i, "");
+    et.nome = rest || lines[di + 1] || "";
+    et.endereco = lines.slice(di + (rest ? 1 : 2), di + 5).join(" ");
+  }
+  const ri = lines.findIndex((l) => /^remetente/i.test(l));
+  if (ri >= 0) et.remetente = lines.slice(ri, ri + 4).join(" ").replace(/^remetente\s*:?\s*/i, "");
+  const cepRe = /(?<!\d)(\d{5})-?(\d{3})(?!\d)/g;
+  for (const l of lines) for (const m of l.matchAll(cepRe)) et.ceps.push(m[1] + m[2]);
+  const nf = text.match(/NF-?e?\s*N?[º°o.]*\s*:?\s*(\d{1,9})/i);
+  if (nf) et.nfe = String(parseInt(nf[1], 10));
+  const ch = text.replace(/\s/g, "").match(/\d{44}/);
+  if (ch) et.chave = ch[0];
+  const tr = text.match(/(?<!\d)888\d{12}(?!\d)/) || text.match(/\b[A-Z]{2}\d{9}BR\b/);
+  if (tr) et.rastreio = tr[0];
+  const low = (text + " " + fileName).toLowerCase();
+  et.transp =
+    /j&t|jt ?express|jtexpress/.test(low) || /^888\d{12}$/.test(et.rastreio) ? "J&T" :
+    /loggi/.test(low) ? "Loggi" :
+    /jadlog/.test(low) ? "Jadlog" :
+    /correios|sedex|\bpac\b/.test(low) || /BR$/.test(et.rastreio) ? "Correios" :
+    /total ?express/.test(low) ? "Total Express" :
+    fileName.replace(/\.pdf$/i, "");
+  return et;
+}
+
+/* ---------- casamento + verificação ---------- */
+function processar(pedidos, etiquetas) {
+  // CEP do remetente = o que aparece em mais da metade das páginas
+  const cepCount = new Map();
+  for (const e of etiquetas) for (const c of new Set(e.ceps)) cepCount.set(c, (cepCount.get(c) || 0) + 1);
+  const remCeps = new Set([...cepCount].filter(([, n]) => etiquetas.length > 2 && n > etiquetas.length / 2).map(([c]) => c));
+  const porCep = new Map();
+  for (const p of pedidos) { if (!porCep.has(p.cep)) porCep.set(p.cep, []); porCep.get(p.cep).push(p); }
+
+  for (const e of etiquetas) {
+    const ceps = [...new Set(e.ceps)].filter((c) => !remCeps.has(c));
+    e.cep = ceps[0] || "";
+    const score = (p) => e.nome ? Math.max(nameSim(e.nome, p.dest), nameSim(e.nome, p.cliente)) : Math.max(coverage(p.dest, e.text), coverage(p.cliente, e.text));
+    let cands = [];
+    for (const c of ceps) for (const p of porCep.get(c) || []) cands.push({ s: score(p), p, viaCep: true });
+    if (!cands.some((c) => c.s >= 0.6)) {
+      for (const p of pedidos) {
+        const s = Math.max(coverage(p.dest, e.text), coverage(p.cliente, e.text), e.nome ? nameSim(e.nome, p.dest) : 0);
+        if (s >= 0.85 && tokens(p.dest).filter((t) => t.length > 2).length >= 2) cands.push({ s: s - 0.01, p, viaCep: false });
+      }
+    }
+    cands.sort((a, b) => b.s - a.s);
+    e.cands = cands.filter((c) => c.s >= 0.6);
+    e.pedido = e.cands[0]?.p || null;
+    e.score = e.cands[0]?.s || 0;
+    e.viaCep = e.cands[0]?.viaCep ?? true;
+    if (e.cep === "" && e.pedido) e.cep = e.pedido.cep;
+  }
+
+  const issues = [];
+  const add = (g, e, msg) => issues.push({ g, e, msg });
+  const where = (e) => `${e.fileName} · pág ${e.pageIdx + 1}`;
+  const usados = new Map();
+  for (const e of etiquetas) {
+    const p = e.pedido;
+    const quem = e.nome || p?.dest || "etiqueta";
+    if (!p) { add("ALTO", e, `Etiqueta de “${quem}” (CEP ${e.cep || "?"}) sem pedido correspondente na Yampi.`); continue; }
+    if (!usados.has(p.numero)) usados.set(p.numero, []);
+    usados.get(p.numero).push(e);
+    if (!e.viaCep) add("ALTO", e, `“${quem}”: casado só pelo nome. CEP da etiqueta ${e.cep || "?"} ≠ CEP na Yampi ${p.cep}.`);
+    if (e.nome && e.score < 0.9) add("MEDIO", e, `Nome diverge: etiqueta “${e.nome}” × Yampi “${p.dest}”.`);
+    if (STATUS_SUSPEITOS.includes(p.status.toLowerCase())) add("ALTO", e, `“${quem}”: pedido ${p.numero} está “${p.status}” na Yampi.`);
+    if (!KITS.has(p.potes)) add("MEDIO", e, `“${quem}”: ${p.potes} potes não é um kit conhecido.`);
+    const num = tokens(p.numEnd)[0];
+    if (num && e.endereco && !tokens(e.endereco).includes(num)) add("BAIXO", e, `“${quem}”: número do endereço na Yampi (${p.numEnd}) não aparece na etiqueta.`);
+    const outros = e.cands.filter((c) => c.p !== p);
+    if (outros.length) {
+      const lista = e.cands.map((c) => `${c.p.numero} (${c.p.potes} ${potesTxt(c.p.potes)}, ${c.p.status}, ${c.p.data})`).join("; ");
+      add("ALTO", e, `“${quem}” tem ${e.cands.length} pedidos na Yampi: ${lista}. Separado com o mais provável; conferir se vão juntos.`);
+    }
+    const cepsFora = [...new Set(e.ceps)].filter((c) => !remCeps.has(c) && c !== p.cep);
+    if (cepsFora.length && e.cands.length === 1 && porCep.get(cepsFora[0])?.length) add("ALTO", e, `Página parece ter mais de uma etiqueta (CEPs ${[p.cep, ...cepsFora].join(", ")}). Não dá para separar por página.`);
+  }
+  const porNf = new Map();
+  for (const e of etiquetas) { const k = e.chave || (e.nfe && "nf" + e.nfe); if (!k) continue; if (!porNf.has(k)) porNf.set(k, []); porNf.get(k).push(e); }
+  for (const [, es] of porNf) if (es.length > 1) {
+    add("ALTO", es[0], `NF-e ${es[0].nfe || es[0].chave} tem ${es.length} etiquetas (${es.map(where).join("; ")}${es.some((x) => x.rastreio) ? "; rastreios " + es.map((x) => x.rastreio || "?").join(", ") : ""}). Etiqueta DUPLICADA: usar só uma e cancelar a outra na transportadora.`);
+  }
+  for (const [num, es] of usados) {
+    const nfs = new Set(es.map((x) => x.chave || x.nfe));
+    if (es.length > 1 && nfs.size > 1) add("ALTO", es[0], `Pedido ${num} casou com ${es.length} etiquetas de NF-es diferentes (${es.map(where).join("; ")}).`);
+  }
+  const rems = new Map();
+  for (const e of etiquetas) if (e.remetente) { if (!rems.has(e.remetente)) rems.set(e.remetente, []); rems.get(e.remetente).push(e); }
+  if (rems.size > 1) for (const [r, es] of rems) if (es.length < etiquetas.length / 2)
+    add("MEDIO", es[0], `Remetente diferente do padrão (${es.map(where).join("; ")}): “${r}”.`);
+
+  const pend = pedidos.filter((p) => !usados.has(p.numero) && STATUS_A_ENVIAR.includes(p.status.toLowerCase()));
+  const ord = { ALTO: 0, MEDIO: 1, BAIXO: 2 };
+  issues.sort((a, b) => ord[a.g] - ord[b.g] || a.e.fileIdx - b.e.fileIdx || a.e.pageIdx - b.e.pageIdx);
+  issues.forEach((i) => (i.where = where(i.e)));
+  return { issues, pend };
+}
+
+/* ---------- saída ---------- */
+async function montarPdfs(etiquetas, porTransp) {
+  const grupos = new Map();
+  for (const e of etiquetas) {
+    const pk = e.pedido ? e.pedido.potes : -1;
+    const tk = porTransp ? e.transp : "";
+    const key = tk + "|" + pk;
+    if (!grupos.has(key)) grupos.set(key, { transp: tk, potes: pk, ets: [] });
+    grupos.get(key).ets.push(e);
+  }
+  const srcDocs = await Promise.all(state.pdfs.map((f) => PDFLib.PDFDocument.load(f.buf.slice(0))));
+  const out = [];
+  for (const g of [...grupos.values()].sort((a, b) => a.transp.localeCompare(b.transp) || (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
+    const doc = await PDFLib.PDFDocument.create();
+    for (const e of g.ets) { const [pg] = await doc.copyPages(srcDocs[e.fileIdx], [e.pageIdx]); doc.addPage(pg); }
+    const slug = g.transp ? g.transp.replace(/[^\w]+/g, "") + "_" : "";
+    g.filename = `etiquetas_${slug}${g.potes < 0 ? "SEM_PEDIDO" : pad2(g.potes) + "_potes"}.pdf`;
+    g.bytes = await doc.save();
+    for (const e of g.ets) e.arquivo = g.filename;
+    out.push(g);
+  }
+  return out;
+}
+
+function conferenciaCsv(etiquetas) {
+  const head = ["arquivo_origem", "pagina", "transportadora", "nome_etiqueta", "cep", "nfe", "rastreio", "pedido_yampi", "nome_yampi", "status_yampi", "potes", "itens", "arquivo_saida"];
+  const rows = etiquetas.map((e) => {
+    const p = e.pedido || {};
+    return [e.fileName, e.pageIdx + 1, e.transp, e.nome, e.cep, e.nfe, e.rastreio, p.numero || "", p.dest || "", p.status || "", p.potes ?? "",
+      (p.itens || []).map((i) => `${i.q}x R$${i.valor}`).join(" + "), e.arquivo];
+  });
+  return "﻿" + [head, ...rows].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+}
+
+async function salvar(filename, data) {
+  const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (dl) {
+    try { await dl.save({ filename, data }); setStatus(`${filename} salvo.`); }
+    catch (err) {
+      const c = err?.code;
+      if (c === "declined") setStatus("Download cancelado.");
+      else if (c === "rate_limited") setStatus("Já existe um download aguardando confirmação.", true);
+      else setStatus(`Não foi possível salvar ${filename} (${c || "erro"}).`, true);
+    }
+    return;
+  }
+  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* ---------- interface ---------- */
+function setStatus(msg, err = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", err); }
+function refreshDocks() {
+  $("chipsCsv").innerHTML = state.csv ? `<span class="chip">${esc(state.csv.name)} · ${state.csv.pedidos.length} pedidos</span>` : "";
+  $("chipsPdf").innerHTML = state.pdfs.map((f) => `<span class="chip">${esc(f.name)} · ${f.pages.length} pág</span>`).join("");
+  $("dockCsv").classList.toggle("filled", !!state.csv);
+  $("dockPdf").classList.toggle("filled", state.pdfs.length > 0);
+  $("btnRun").disabled = !(state.csv && state.pdfs.length);
+}
+async function addCsv(file) {
+  try {
+    const pedidos = lerPedidos(await file.text());
+    state.csv = { name: file.name, pedidos };
+    setStatus(""); refreshDocks();
+  } catch (e) { setStatus(e.message, true); }
+}
+async function addPdfs(files) {
+  for (const file of files) {
+    if (!/\.pdf$/i.test(file.name)) { if (/\.csv$/i.test(file.name)) await addCsv(file); continue; }
+    if (state.pdfs.some((f) => f.name === file.name && f.size === file.size)) continue;
+    setStatus(`Lendo ${file.name}…`);
+    try {
+      const { buf, pages } = await lerEtiquetas(file, state.pdfs.length);
+      state.pdfs.push({ name: file.name, size: file.size, buf, pages });
+    } catch (e) { setStatus(`Não consegui ler ${file.name}: ${e.message}`, true); return; }
+  }
+  setStatus(""); refreshDocks();
+}
+function wireDock(dock, input, handler) {
+  input.addEventListener("change", () => { handler([...input.files]); input.value = ""; });
+  dock.addEventListener("dragover", (e) => { e.preventDefault(); dock.classList.add("over"); });
+  dock.addEventListener("dragleave", () => dock.classList.remove("over"));
+  dock.addEventListener("drop", (e) => { e.preventDefault(); dock.classList.remove("over"); handler([...e.dataTransfer.files]); });
+}
+wireDock($("dockCsv"), $("inCsv"), (fs) => {
+  const pdfs = fs.filter((f) => /\.pdf$/i.test(f.name)); const csv = fs.find((f) => /\.csv$/i.test(f.name));
+  if (csv) addCsv(csv); if (pdfs.length) addPdfs(pdfs);
+});
+wireDock($("dockPdf"), $("inPdf"), addPdfs);
+
+$("btnClear").onclick = () => { state.csv = null; state.pdfs = []; state.out = null; $("results").hidden = true; $("intro").hidden = false; setStatus(""); refreshDocks(); };
+
+$("btnRun").onclick = async () => {
+  $("btnRun").disabled = true; setStatus("Separando…");
+  try {
+    const etiquetas = state.pdfs.flatMap((f) => f.pages);
+    const { issues, pend } = processar(state.csv.pedidos, etiquetas);
+    const grupos = await montarPdfs(etiquetas, $("optCarrier").checked);
+    state.out = { etiquetas, issues, pend, grupos };
+    render();
+    setStatus(`${etiquetas.length} etiquetas separadas em ${grupos.length} arquivos.`);
+  } catch (e) { console.error(e); setStatus("Erro ao separar: " + e.message, true); }
+  $("btnRun").disabled = false;
+};
+
+function render() {
+  const { etiquetas, issues, pend, grupos } = state.out;
+  $("intro").hidden = true; $("results").hidden = false;
+  const casadas = etiquetas.filter((e) => e.pedido);
+  const potes = casadas.reduce((s, e) => s + e.pedido.potes, 0);
+  const semPed = etiquetas.length - casadas.length;
+  $("totals").innerHTML = `<b>${etiquetas.length}</b> etiquetas · <b>${potes}</b> potes · ${semPed ? `<b>${semPed}</b> sem pedido` : "todas casadas com a Yampi"}`;
+
+  const porT = new Map();
+  grupos.forEach((g, i) => { if (!porT.has(g.transp)) porT.set(g.transp, []); porT.get(g.transp).push([g, i]); });
+  $("groups").innerHTML = [...porT].map(([t, gs]) => `
+    <div class="carrier">${t ? `<div class="carrier-name">${esc(t)}</div>` : ""}
+      <div class="labels">${gs.map(([g, i]) => `
+        <div class="lbl ${g.potes < 0 ? "nomatch" : ""}">
+          <div class="lbl-top"><span>${esc(t || "Todas")}</span><span>${g.ets.length} etiq.</span></div>
+          <div class="lbl-big">${g.potes < 0 ? "?" : g.potes}<small>${g.potes < 0 ? "sem pedido" : potesTxt(g.potes)}</small></div>
+          <div class="lbl-meta">${g.potes < 0 ? "conferir à mão" : `${g.potes * g.ets.length} potes no total`}</div>
+          <button data-g="${i}">Baixar PDF</button>
+        </div>`).join("")}
+      </div>
+    </div>`).join("");
+  $("groups").querySelectorAll("button[data-g]").forEach((b) => b.onclick = () => { const g = grupos[+b.dataset.g]; salvar(g.filename, new Blob([g.bytes], { type: "application/pdf" })); });
+
+  const n = { ALTO: 0, MEDIO: 0, BAIXO: 0 }; issues.forEach((i) => n[i.g]++);
+  $("issueCount").textContent = issues.length ? `${n.ALTO} alto · ${n.MEDIO} médio · ${n.BAIXO} baixo` : "";
+  $("issues").innerHTML = issues.length ? issues.map((i) => `
+    <div class="issue"><span class="pill ${i.g}">${i.g === "MEDIO" ? "MÉDIO" : i.g}</span>
+      <div class="msg">${esc(i.msg)}<span class="where">${esc(i.where)}</span></div></div>`).join("")
+    : `<div class="issue"><span class="pill OK">OK</span><div class="msg">Nenhum problema encontrado nas etiquetas.</div></div>`;
+  $("pendDetails").hidden = !pend.length;
+  $("pendSummary").textContent = `${pend.length} pedidos pagos/faturados na Yampi sem etiqueta nestes PDFs`;
+  $("pending").innerHTML = `<p class="foot" style="margin:0">Se já foram enviados em outro dia, o status na Yampi não foi atualizado para “Em transporte”. Se não, estão parados.</p>
+    <div class="tablewrap"><table><thead><tr><th>Data</th><th>Cliente</th><th>CEP</th><th>Potes</th><th>Status</th><th>Pedido</th></tr></thead><tbody>
+    ${pend.sort((a, b) => a.data.split("/").reverse().join().localeCompare(b.data.split("/").reverse().join())).map((p) => `<tr><td>${esc(p.data)}</td><td>${esc(p.dest)}</td><td>${esc(p.cep)}</td><td class="num">${p.potes}</td><td>${esc(p.status)}</td><td>${esc(p.numero)}</td></tr>`).join("")}
+    </tbody></table></div>`;
+
+  $("conf").innerHTML = `<thead><tr><th>Arquivo · pág</th><th>Etiqueta</th><th>CEP</th><th>NF-e</th><th>Pedido Yampi</th><th>Status</th><th>Potes</th><th>Itens</th></tr></thead><tbody>${
+    etiquetas.map((e) => { const p = e.pedido; return `<tr><td>${esc(e.fileName)} · ${e.pageIdx + 1}</td><td>${esc(e.nome || p?.dest || "")}</td><td>${esc(e.cep)}</td><td>${esc(e.nfe)}</td>
+      <td>${p ? esc(p.numero) : '<span class="pill ALTO">SEM PEDIDO</span>'}</td><td>${esc(p?.status || "")}</td><td class="num">${p ? p.potes : ""}</td>
+      <td>${p ? esc(p.itens.map((i) => `${i.q}× R$${i.valor}`).join(" + ")) : ""}</td></tr>`; }).join("")}</tbody>`;
+}
+
+$("btnZip").onclick = async () => {
+  const zip = new JSZip();
+  for (const g of state.out.grupos) zip.file(g.filename, g.bytes);
+  zip.file("conferencia.csv", conferenciaCsv(state.out.etiquetas));
+  const rel = ["POSSÍVEIS ERROS", ...state.out.issues.map((i) => `[${i.g}] ${i.where}: ${i.msg}`), "", "PEDIDOS PAGOS SEM ETIQUETA",
+    ...state.out.pend.map((p) => `${p.data} ${p.dest} (${p.potes} ${potesTxt(p.potes)}, ${p.status}) pedido ${p.numero}`)].join("\r\n");
+  zip.file("relatorio.txt", "﻿" + rel);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const d = new Date();
+  salvar(`etiquetas_${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}.zip`, blob);
+};
+$("btnCsv").onclick = () => salvar("conferencia.csv", conferenciaCsv(state.out.etiquetas));
+refreshDocks();
+</script>

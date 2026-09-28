@@ -42,8 +42,9 @@ h2 { font-size: 20px; font-weight: 750; font-stretch: 90%; }
 .lede { color: var(--muted); max-width: 62ch; margin: 8px 0 0; }
 header { display: grid; gap: 6px; }
 
-.docks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 680px) { .docks { grid-template-columns: 1fr; } }
+.docks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 820px) { .docks { grid-template-columns: 1fr 1fr; } #dockCsv { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .docks { grid-template-columns: 1fr; } #dockCsv { grid-column: auto; } }
 .dock { position: relative; background: var(--panel); border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; transition: border-color .15s, background .15s; }
 .dock.over { border-color: var(--accent); background: var(--accent-soft); }
 .dock.filled { border-style: solid; }
@@ -52,6 +53,8 @@ header { display: grid; gap: 6px; }
 .dock-head { display: flex; align-items: baseline; gap: 10px; }
 .dock-num { font: 800 13px/1 var(--f-mono); color: var(--accent); }
 .dock h3 { font-size: 17px; font-weight: 700; }
+.dock .opt { margin-left: auto; font: 500 11px/1 var(--f-mono); color: var(--muted); letter-spacing: .06em; }
+.carrier-name b { color: var(--ink); }
 .dock p { margin: 0; color: var(--muted); font-size: 13.5px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; position: relative; z-index: 1; pointer-events: none; }
 .chip { font: 500 12px/1.3 var(--f-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
@@ -117,7 +120,7 @@ td.num { text-align: right; font-family: var(--f-mono); }
   <header>
     <span class="eyebrow">Dose Primal · Expedição</span>
     <h1>Separador de Etiquetas</h1>
-    <p class="lede">Solte o relatório de pedidos da Yampi e os PDFs de etiquetas do dia. A página casa cada etiqueta com o pedido (CEP + nome), soma os potes (kit + order bump) e devolve um PDF para cada quantidade, além da lista de possíveis erros.</p>
+    <p class="lede">Solte o relatório de pedidos da Yampi e as etiquetas do dia de cada transportadora (J&amp;T, Loggi ou as duas). A página confere cada etiqueta com o pedido (CEP + nome), soma os potes (kit + order bump) e devolve um PDF por transportadora e por quantidade, além da lista de possíveis erros.</p>
   </header>
 
   <div class="docks">
@@ -127,17 +130,22 @@ td.num { text-align: right; font-family: var(--f-mono); }
       <div class="chips" id="chipsCsv"></div>
       <input type="file" id="inCsv" accept=".csv,text/csv" aria-label="Arquivo CSV da Yampi">
     </div>
-    <div class="dock" id="dockPdf">
-      <div class="dock-head"><span class="dock-num">2</span><h3>Etiquetas (PDF)</h3></div>
-      <p>Um ou mais PDFs, de qualquer transportadora (J&amp;T, Loggi…). Uma etiqueta por página.</p>
-      <div class="chips" id="chipsPdf"></div>
-      <input type="file" id="inPdf" accept=".pdf,application/pdf" multiple aria-label="PDFs de etiquetas">
+    <div class="dock" id="dockJT">
+      <div class="dock-head"><span class="dock-num">2</span><h3>Etiquetas J&amp;T</h3><span class="opt">opcional</span></div>
+      <p>PDF(s) de etiquetas da J&amp;T do dia. Uma etiqueta por página.</p>
+      <div class="chips" id="chipsJT"></div>
+      <input type="file" id="inJT" accept=".pdf,application/pdf" multiple aria-label="PDFs de etiquetas J&amp;T">
+    </div>
+    <div class="dock" id="dockLoggi">
+      <div class="dock-head"><span class="dock-num">3</span><h3>Etiquetas Loggi</h3><span class="opt">opcional</span></div>
+      <p>PDF(s) de etiquetas da Loggi do dia. Uma etiqueta por página.</p>
+      <div class="chips" id="chipsLoggi"></div>
+      <input type="file" id="inLoggi" accept=".pdf,application/pdf" multiple aria-label="PDFs de etiquetas Loggi">
     </div>
   </div>
 
   <div class="actions">
     <button class="primary" id="btnRun" disabled>Separar etiquetas</button>
-    <label class="toggle"><input type="checkbox" id="optCarrier" checked> Separar também por transportadora</label>
     <button id="btnClear">Limpar</button>
     <span class="status" id="status" role="status"></span>
   </div>
@@ -168,15 +176,21 @@ td.num { text-align: right; font-family: var(--f-mono); }
     <div class="section-head"><h2>Como funciona</h2></div>
     <div class="howto">
       <div><b>Casa pelo CEP</b>Procura na Yampi o pedido com o mesmo CEP da etiqueta e confirma pelo nome do destinatário (tolera nome cortado).</div>
-      <div><b>Soma os potes</b>Kit + order bump do mesmo pedido: kit 3 + bump 1 = 4 potes. Kits: 1, 2, 3, 4, 6, 7, 8, 9.</div>
+      <div><b>Separa por transportadora e potes</b>J&amp;T e Loggi nunca caem no mesmo PDF. Potes = kit + order bump do pedido (kit 3 + bump 1 = 4 potes).</div>
       <div><b>Aponta erros</b>Etiqueta duplicada, etiqueta sem pedido, pedido já em transporte, cliente com 2 pedidos, pedido pago sem etiqueta.</div>
     </div>
     <div class="section-head"><h3 style="font-size:16px">Resultado</h3><span class="example-tag">EXEMPLO</span></div>
-    <div class="labels example" aria-hidden="true">
-      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>15 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">15 potes no total</div></div>
-      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>10 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">30 potes no total</div></div>
-      <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>5 etiq.</span></div><div class="lbl-big">4<small>potes</small></div><div class="lbl-meta">20 potes no total</div></div>
-      <div class="lbl nomatch"><div class="lbl-top"><span>J&amp;T</span><span>2 etiq.</span></div><div class="lbl-big">?<small>sem pedido</small></div><div class="lbl-meta">conferir à mão</div></div>
+    <div class="stack example" aria-hidden="true">
+      <div class="carrier"><div class="carrier-name"><b>J&amp;T</b> · 25 etiquetas · 45 potes</div>
+        <div class="labels">
+          <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>15 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">etiquetas_JT_01_potes.pdf</div></div>
+          <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>10 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">etiquetas_JT_03_potes.pdf</div></div>
+        </div></div>
+      <div class="carrier"><div class="carrier-name"><b>Loggi</b> · 12 etiquetas · 30 potes</div>
+        <div class="labels">
+          <div class="lbl"><div class="lbl-top"><span>Loggi</span><span>6 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">etiquetas_Loggi_01_potes.pdf</div></div>
+          <div class="lbl"><div class="lbl-top"><span>Loggi</span><span>6 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">etiquetas_Loggi_03_potes.pdf</div></div>
+        </div></div>
     </div>
   </section>
 
@@ -192,6 +206,8 @@ const KITS = new Set([1, 2, 3, 4, 6, 7, 8, 9]);
 const STATUS_SUSPEITOS = ["em transporte", "entregue", "cancelado", "estornado", "aguardando pagamento", "pagamento recusado", "devolvido"];
 const STATUS_A_ENVIAR = ["faturado", "pagamento aprovado"];
 const $ = (id) => document.getElementById(id);
+const CARRIERS = ["J&T", "Loggi"];
+const DOCK = { "J&T": "JT", "Loggi": "Loggi" };
 const state = { csv: null, pdfs: [], out: null };
 
 /* ---------- utilidades ---------- */
@@ -262,7 +278,7 @@ function lerPedidos(text) {
   return [...map.values()];
 }
 
-async function lerEtiquetas(file, fileIdx) {
+async function lerEtiquetas(file, fileIdx, transp) {
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
   const pages = [];
@@ -279,7 +295,7 @@ async function lerEtiquetas(file, fileIdx) {
     }
     rows.sort((a, b) => b.y - a.y);
     const lines = rows.map((r) => r.parts.sort((a, b) => a.x - b.x).map((p) => p.s).join(" ").replace(/\s+/g, " ").trim());
-    pages.push(parsePagina(lines, file.name, fileIdx, i - 1));
+    pages.push(Object.assign(parsePagina(lines, file.name, fileIdx, i - 1), { transp }));
   }
   return { buf, pages };
 }
@@ -304,13 +320,13 @@ function parsePagina(lines, fileName, fileIdx, pageIdx) {
   const tr = text.match(/(?<!\d)888\d{12}(?!\d)/) || text.match(/\b[A-Z]{2}\d{9}BR\b/);
   if (tr) et.rastreio = tr[0];
   const low = (text + " " + fileName).toLowerCase();
-  et.transp =
+  et.detectado =
     /j&t|jt ?express|jtexpress/.test(low) || /^888\d{12}$/.test(et.rastreio) ? "J&T" :
     /loggi/.test(low) ? "Loggi" :
     /jadlog/.test(low) ? "Jadlog" :
     /correios|sedex|\bpac\b/.test(low) || /BR$/.test(et.rastreio) ? "Correios" :
     /total ?express/.test(low) ? "Total Express" :
-    fileName.replace(/\.pdf$/i, "");
+    "";
   return et;
 }
 
@@ -345,7 +361,7 @@ function processar(pedidos, etiquetas) {
 
   const issues = [];
   const add = (g, e, msg) => issues.push({ g, e, msg });
-  const where = (e) => `${e.fileName} · pág ${e.pageIdx + 1}`;
+  const where = (e) => `${e.transp} · ${e.fileName} · pág ${e.pageIdx + 1}`;
   const usados = new Map();
   for (const e of etiquetas) {
     const p = e.pedido;
@@ -376,6 +392,12 @@ function processar(pedidos, etiquetas) {
     const nfs = new Set(es.map((x) => x.chave || x.nfe));
     if (es.length > 1 && nfs.size > 1) add("ALTO", es[0], `Pedido ${num} casou com ${es.length} etiquetas de NF-es diferentes (${es.map(where).join("; ")}).`);
   }
+  for (const f of state.pdfs) {
+    const det = f.pages.map((e) => e.detectado).filter(Boolean);
+    const outra = det.find((d) => d !== f.transp && (d === "J&T" || d === "Loggi"));
+    if (outra && det.filter((d) => d === outra).length > det.length / 2)
+      add("ALTO", f.pages[0], `O arquivo ${f.name} foi colocado em ${f.transp}, mas as etiquetas parecem ser da ${outra}. Confira se soltou no quadro certo.`);
+  }
   const rems = new Map();
   for (const e of etiquetas) if (e.remetente) { if (!rems.has(e.remetente)) rems.set(e.remetente, []); rems.get(e.remetente).push(e); }
   if (rems.size > 1) for (const [r, es] of rems) if (es.length < etiquetas.length / 2)
@@ -389,21 +411,21 @@ function processar(pedidos, etiquetas) {
 }
 
 /* ---------- saída ---------- */
-async function montarPdfs(etiquetas, porTransp) {
+async function montarPdfs(etiquetas) {
   const grupos = new Map();
   for (const e of etiquetas) {
     const pk = e.pedido ? e.pedido.potes : -1;
-    const tk = porTransp ? e.transp : "";
+    const tk = e.transp;
     const key = tk + "|" + pk;
     if (!grupos.has(key)) grupos.set(key, { transp: tk, potes: pk, ets: [] });
     grupos.get(key).ets.push(e);
   }
   const srcDocs = await Promise.all(state.pdfs.map((f) => PDFLib.PDFDocument.load(f.buf.slice(0))));
   const out = [];
-  for (const g of [...grupos.values()].sort((a, b) => a.transp.localeCompare(b.transp) || (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
+  for (const g of [...grupos.values()].sort((a, b) => CARRIERS.indexOf(a.transp) - CARRIERS.indexOf(b.transp) || (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
     const doc = await PDFLib.PDFDocument.create();
     for (const e of g.ets) { const [pg] = await doc.copyPages(srcDocs[e.fileIdx], [e.pageIdx]); doc.addPage(pg); }
-    const slug = g.transp ? g.transp.replace(/[^\w]+/g, "") + "_" : "";
+    const slug = g.transp.replace(/[^\w]+/g, "") + "_";
     g.filename = `etiquetas_${slug}${g.potes < 0 ? "SEM_PEDIDO" : pad2(g.potes) + "_potes"}.pdf`;
     g.bytes = await doc.save();
     for (const e of g.ets) e.arquivo = g.filename;
@@ -444,9 +466,12 @@ async function salvar(filename, data) {
 function setStatus(msg, err = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", err); }
 function refreshDocks() {
   $("chipsCsv").innerHTML = state.csv ? `<span class="chip">${esc(state.csv.name)} · ${state.csv.pedidos.length} pedidos</span>` : "";
-  $("chipsPdf").innerHTML = state.pdfs.map((f) => `<span class="chip">${esc(f.name)} · ${f.pages.length} pág</span>`).join("");
+  for (const t of CARRIERS) {
+    const fs = state.pdfs.filter((f) => f.transp === t);
+    $("chips" + DOCK[t]).innerHTML = fs.map((f) => `<span class="chip">${esc(f.name)} · ${f.pages.length} pág</span>`).join("");
+    $("dock" + DOCK[t]).classList.toggle("filled", fs.length > 0);
+  }
   $("dockCsv").classList.toggle("filled", !!state.csv);
-  $("dockPdf").classList.toggle("filled", state.pdfs.length > 0);
   $("btnRun").disabled = !(state.csv && state.pdfs.length);
 }
 async function addCsv(file) {
@@ -456,14 +481,15 @@ async function addCsv(file) {
     setStatus(""); refreshDocks();
   } catch (e) { setStatus(e.message, true); }
 }
-async function addPdfs(files) {
+async function addPdfs(files, transp) {
   for (const file of files) {
     if (!/\.pdf$/i.test(file.name)) { if (/\.csv$/i.test(file.name)) await addCsv(file); continue; }
-    if (state.pdfs.some((f) => f.name === file.name && f.size === file.size)) continue;
+    const dup = state.pdfs.find((f) => f.name === file.name && f.size === file.size);
+    if (dup) { setStatus(`${file.name} já foi adicionado em ${dup.transp}.`, true); return; }
     setStatus(`Lendo ${file.name}…`);
     try {
-      const { buf, pages } = await lerEtiquetas(file, state.pdfs.length);
-      state.pdfs.push({ name: file.name, size: file.size, buf, pages });
+      const { buf, pages } = await lerEtiquetas(file, state.pdfs.length, transp);
+      state.pdfs.push({ name: file.name, size: file.size, transp, buf, pages });
     } catch (e) { setStatus(`Não consegui ler ${file.name}: ${e.message}`, true); return; }
   }
   setStatus(""); refreshDocks();
@@ -476,9 +502,11 @@ function wireDock(dock, input, handler) {
 }
 wireDock($("dockCsv"), $("inCsv"), (fs) => {
   const pdfs = fs.filter((f) => /\.pdf$/i.test(f.name)); const csv = fs.find((f) => /\.csv$/i.test(f.name));
-  if (csv) addCsv(csv); if (pdfs.length) addPdfs(pdfs);
+  if (csv) addCsv(csv);
+  if (pdfs.length) setStatus("Solte os PDFs de etiquetas no quadro da transportadora (J&T ou Loggi).", true);
 });
-wireDock($("dockPdf"), $("inPdf"), addPdfs);
+wireDock($("dockJT"), $("inJT"), (fs) => addPdfs(fs, "J&T"));
+wireDock($("dockLoggi"), $("inLoggi"), (fs) => addPdfs(fs, "Loggi"));
 
 $("btnClear").onclick = () => { state.csv = null; state.pdfs = []; state.out = null; $("results").hidden = true; $("intro").hidden = false; setStatus(""); refreshDocks(); };
 
@@ -487,7 +515,7 @@ $("btnRun").onclick = async () => {
   try {
     const etiquetas = state.pdfs.flatMap((f) => f.pages);
     const { issues, pend } = processar(state.csv.pedidos, etiquetas);
-    const grupos = await montarPdfs(etiquetas, $("optCarrier").checked);
+    const grupos = await montarPdfs(etiquetas);
     state.out = { etiquetas, issues, pend, grupos };
     render();
     setStatus(`${etiquetas.length} etiquetas separadas em ${grupos.length} arquivos.`);
@@ -506,10 +534,10 @@ function render() {
   const porT = new Map();
   grupos.forEach((g, i) => { if (!porT.has(g.transp)) porT.set(g.transp, []); porT.get(g.transp).push([g, i]); });
   $("groups").innerHTML = [...porT].map(([t, gs]) => `
-    <div class="carrier">${t ? `<div class="carrier-name">${esc(t)}</div>` : ""}
+    <div class="carrier"><div class="carrier-name"><b>${esc(t)}</b> · ${gs.reduce((s, [g]) => s + g.ets.length, 0)} etiquetas · ${gs.reduce((s, [g]) => s + (g.potes > 0 ? g.potes * g.ets.length : 0), 0)} potes</div>
       <div class="labels">${gs.map(([g, i]) => `
         <div class="lbl ${g.potes < 0 ? "nomatch" : ""}">
-          <div class="lbl-top"><span>${esc(t || "Todas")}</span><span>${g.ets.length} etiq.</span></div>
+          <div class="lbl-top"><span>${esc(t)}</span><span>${g.ets.length} etiq.</span></div>
           <div class="lbl-big">${g.potes < 0 ? "?" : g.potes}<small>${g.potes < 0 ? "sem pedido" : potesTxt(g.potes)}</small></div>
           <div class="lbl-meta">${g.potes < 0 ? "conferir à mão" : `${g.potes * g.ets.length} potes no total`}</div>
           <button data-g="${i}">Baixar PDF</button>
@@ -531,8 +559,8 @@ function render() {
     ${pend.sort((a, b) => a.data.split("/").reverse().join().localeCompare(b.data.split("/").reverse().join())).map((p) => `<tr><td>${esc(p.data)}</td><td>${esc(p.dest)}</td><td>${esc(p.cep)}</td><td class="num">${p.potes}</td><td>${esc(p.status)}</td><td>${esc(p.numero)}</td></tr>`).join("")}
     </tbody></table></div>`;
 
-  $("conf").innerHTML = `<thead><tr><th>Arquivo · pág</th><th>Etiqueta</th><th>CEP</th><th>NF-e</th><th>Pedido Yampi</th><th>Status</th><th>Potes</th><th>Itens</th></tr></thead><tbody>${
-    etiquetas.map((e) => { const p = e.pedido; return `<tr><td>${esc(e.fileName)} · ${e.pageIdx + 1}</td><td>${esc(e.nome || p?.dest || "")}</td><td>${esc(e.cep)}</td><td>${esc(e.nfe)}</td>
+  $("conf").innerHTML = `<thead><tr><th>Transp.</th><th>Arquivo · pág</th><th>Etiqueta</th><th>CEP</th><th>NF-e</th><th>Pedido Yampi</th><th>Status</th><th>Potes</th><th>Itens</th></tr></thead><tbody>${
+    etiquetas.map((e) => { const p = e.pedido; return `<tr><td>${esc(e.transp)}</td><td>${esc(e.fileName)} · ${e.pageIdx + 1}</td><td>${esc(e.nome || p?.dest || "")}</td><td>${esc(e.cep)}</td><td>${esc(e.nfe)}</td>
       <td>${p ? esc(p.numero) : '<span class="pill ALTO">SEM PEDIDO</span>'}</td><td>${esc(p?.status || "")}</td><td class="num">${p ? p.potes : ""}</td>
       <td>${p ? esc(p.itens.map((i) => `${i.q}× R$${i.valor}`).join(" + ")) : ""}</td></tr>`; }).join("")}</tbody>`;
 }

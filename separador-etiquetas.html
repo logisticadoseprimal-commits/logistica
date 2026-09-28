@@ -177,7 +177,7 @@ td.num { text-align: right; font-family: var(--f-mono); }
     <div class="howto">
       <div><b>Casa pelo CEP</b>Procura na Yampi o pedido com o mesmo CEP da etiqueta e confirma pelo nome do destinatário (tolera nome cortado).</div>
       <div><b>Separa por transportadora e potes</b>J&amp;T e Loggi nunca caem no mesmo PDF. Potes = kit + order bump do pedido (kit 3 + bump 1 = 4 potes).</div>
-      <div><b>Aponta erros</b>Etiqueta duplicada, etiqueta sem pedido, pedido já em transporte, cliente com 2 pedidos, pedido pago sem etiqueta.</div>
+      <div><b>Aponta erros</b>Etiqueta duplicada, etiqueta sem pedido, pedido já em transporte, cliente com 2 pedidos, caixa da Loggi que não bate com os potes, pedido pago sem etiqueta.</div>
     </div>
     <div class="section-head"><h3 style="font-size:16px">Resultado</h3><span class="example-tag">EXEMPLO</span></div>
     <div class="stack example" aria-hidden="true">
@@ -207,6 +207,8 @@ const STATUS_SUSPEITOS = ["em transporte", "entregue", "cancelado", "estornado",
 const STATUS_A_ENVIAR = ["faturado", "pagamento aprovado"];
 const $ = (id) => document.getElementById(id);
 const CARRIERS = ["J&T", "Loggi"];
+// Caixa usada por quantidade de potes (visto nas etiquetas Loggi de 28/09/2026). A página também aprende pelos dados do dia.
+const CAIXAS = { 1: "8x10x6", 2: "19x12x7", 4: "19x12x12" };
 const DOCK = { "J&T": "JT", "Loggi": "Loggi" };
 const state = { csv: null, pdfs: [], out: null };
 
@@ -303,26 +305,40 @@ async function lerEtiquetas(file, fileIdx, transp) {
 function parsePagina(lines, fileName, fileIdx, pageIdx) {
   const text = lines.join("\n");
   const et = { fileName, fileIdx, pageIdx, lines, text, nome: "", ceps: [], nfe: "", chave: "", rastreio: "", remetente: "", endereco: "" };
-  const di = lines.findIndex((l) => /^destinat[aá]rio/i.test(l));
+  // J&T: "DESTINATÁRIO" e o nome na linha de baixo · Loggi: "ENTREGAR PARA <nome>"
+  const DEST = /^(destinat[aá]rio|entregar para)\s*:?\s*/i;
+  const di = lines.findIndex((l) => DEST.test(l));
   if (di >= 0) {
-    const rest = lines[di].replace(/^destinat[aá]rio\s*:?\s*/i, "");
+    const rest = lines[di].replace(DEST, "");
     et.nome = rest || lines[di + 1] || "";
-    et.endereco = lines.slice(di + (rest ? 1 : 2), di + 5).join(" ");
+    const fim = lines.findIndex((l, i) => i > di && /^(observa|remetente)/i.test(l));
+    et.endereco = lines.slice(di + (rest ? 1 : 2), fim > di ? Math.min(fim, di + 5) : di + 5).join(" ");
   }
-  const ri = lines.findIndex((l) => /^remetente/i.test(l));
-  if (ri >= 0) et.remetente = lines.slice(ri, ri + 4).join(" ").replace(/^remetente\s*:?\s*/i, "");
   const cepRe = /(?<!\d)(\d{5})-?(\d{3})(?!\d)/g;
+  const ri = lines.findIndex((l) => /^remetente/i.test(l));
+  et.cepsRem = [];
+  if (ri >= 0) {
+    const bloco = lines.slice(ri, ri + 4);
+    et.remetente = bloco.join(" ").replace(/^remetente\s*:?\s*/i, "");
+    for (const l of bloco) for (const m of l.matchAll(cepRe)) et.cepsRem.push(m[1] + m[2]);
+  }
   for (const l of lines) for (const m of l.matchAll(cepRe)) et.ceps.push(m[1] + m[2]);
   const nf = text.match(/NF-?e?\s*N?[º°o.]*\s*:?\s*(\d{1,9})/i);
   if (nf) et.nfe = String(parseInt(nf[1], 10));
   const ch = text.replace(/\s/g, "").match(/\d{44}/);
   if (ch) et.chave = ch[0];
-  const tr = text.match(/(?<!\d)888\d{12}(?!\d)/) || text.match(/\b[A-Z]{2}\d{9}BR\b/);
+  if (!et.nfe && et.chave) et.nfe = String(parseInt(et.chave.slice(25, 34), 10)); // nº da NF dentro da chave
+  // Loggi imprime peso e caixa: servem para conferir a quantidade de potes
+  const peso = text.match(/(?<![\w.,])(\d+(?:[.,]\d+)?)\s?(kg|g)\b/i);
+  if (peso) et.peso = Math.round(parseFloat(peso[1].replace(",", ".")) * (peso[2].toLowerCase() === "kg" ? 1000 : 1));
+  const caixa = text.match(/(\d+)\s?x\s?(\d+)\s?x\s?(\d+)\s?cm/i);
+  if (caixa) et.caixa = `${caixa[1]}x${caixa[2]}x${caixa[3]}`;
+  const tr = text.match(/(?<!\d)888\d{12}(?!\d)/) || text.match(/\bBLI_\d+\b/) || text.match(/\b[A-Z]{2}\d{9}BR\b/);
   if (tr) et.rastreio = tr[0];
   const low = (text + " " + fileName).toLowerCase();
   et.detectado =
     /j&t|jt ?express|jtexpress/.test(low) || /^888\d{12}$/.test(et.rastreio) ? "J&T" :
-    /loggi/.test(low) ? "Loggi" :
+    /loggi/.test(low) || /^BLI_/.test(et.rastreio) ? "Loggi" :
     /jadlog/.test(low) ? "Jadlog" :
     /correios|sedex|\bpac\b/.test(low) || /BR$/.test(et.rastreio) ? "Correios" :
     /total ?express/.test(low) ? "Total Express" :
@@ -340,7 +356,7 @@ function processar(pedidos, etiquetas) {
   for (const p of pedidos) { if (!porCep.has(p.cep)) porCep.set(p.cep, []); porCep.get(p.cep).push(p); }
 
   for (const e of etiquetas) {
-    const ceps = [...new Set(e.ceps)].filter((c) => !remCeps.has(c));
+    const ceps = [...new Set(e.ceps)].filter((c) => !remCeps.has(c) && !e.cepsRem.includes(c));
     e.cep = ceps[0] || "";
     const score = (p) => e.nome ? Math.max(nameSim(e.nome, p.dest), nameSim(e.nome, p.cliente)) : Math.max(coverage(p.dest, e.text), coverage(p.cliente, e.text));
     let cands = [];
@@ -380,7 +396,7 @@ function processar(pedidos, etiquetas) {
       const lista = e.cands.map((c) => `${c.p.numero} (${c.p.potes} ${potesTxt(c.p.potes)}, ${c.p.status}, ${c.p.data})`).join("; ");
       add("ALTO", e, `“${quem}” tem ${e.cands.length} pedidos na Yampi: ${lista}. Separado com o mais provável; conferir se vão juntos.`);
     }
-    const cepsFora = [...new Set(e.ceps)].filter((c) => !remCeps.has(c) && c !== p.cep);
+    const cepsFora = [...new Set(e.ceps)].filter((c) => !remCeps.has(c) && !e.cepsRem.includes(c) && c !== p.cep);
     if (cepsFora.length && e.cands.length === 1 && porCep.get(cepsFora[0])?.length) add("ALTO", e, `Página parece ter mais de uma etiqueta (CEPs ${[p.cep, ...cepsFora].join(", ")}). Não dá para separar por página.`);
   }
   const porNf = new Map();
@@ -398,10 +414,28 @@ function processar(pedidos, etiquetas) {
     if (outra && det.filter((d) => d === outra).length > det.length / 2)
       add("ALTO", f.pages[0], `O arquivo ${f.name} foi colocado em ${f.transp}, mas as etiquetas parecem ser da ${outra}. Confira se soltou no quadro certo.`);
   }
-  const rems = new Map();
-  for (const e of etiquetas) if (e.remetente) { if (!rems.has(e.remetente)) rems.set(e.remetente, []); rems.get(e.remetente).push(e); }
-  if (rems.size > 1) for (const [r, es] of rems) if (es.length < etiquetas.length / 2)
-    add("MEDIO", es[0], `Remetente diferente do padrão (${es.map(where).join("; ")}): “${r}”.`);
+  for (const t of CARRIERS) { // remetente comparado dentro da mesma transportadora
+    const doT = etiquetas.filter((e) => e.transp === t && e.remetente);
+    const rems = new Map();
+    for (const e of doT) { if (!rems.has(e.remetente)) rems.set(e.remetente, []); rems.get(e.remetente).push(e); }
+    if (rems.size > 1) for (const [r, es] of rems) if (es.length < doT.length / 2)
+      add("MEDIO", es[0], `Remetente diferente do padrão da ${t} (${es.map(where).join("; ")}): “${r}”.`);
+  }
+  // caixa/peso impressos na etiqueta × potes da Yampi (a caixa mais comum para cada quantidade é a referência)
+  const caixaRef = new Map(Object.entries(CAIXAS).map(([k, v]) => [+k, v]));
+  const porPote = new Map();
+  for (const e of etiquetas) if (e.pedido && e.caixa) { const k = e.pedido.potes; if (!porPote.has(k)) porPote.set(k, new Map()); const m = porPote.get(k); m.set(e.caixa, (m.get(e.caixa) || 0) + 1); }
+  for (const [k, m] of porPote) { const [cx, n] = [...m].sort((a, b) => b[1] - a[1])[0]; if (n >= 2 && n > [...m.values()].reduce((a, b) => a + b, 0) / 2) caixaRef.set(k, cx); }
+  const potesDaCaixa = (cx) => [...caixaRef].filter(([, v]) => v === cx).map(([k]) => k);
+  for (const e of etiquetas) {
+    if (!e.pedido || !e.caixa) continue;
+    const esperado = caixaRef.get(e.pedido.potes);
+    if (esperado && esperado !== e.caixa) {
+      const outro = potesDaCaixa(e.caixa);
+      add("ALTO", e, `“${e.nome || e.pedido.dest}”: Yampi diz ${e.pedido.potes} ${potesTxt(e.pedido.potes)}, mas a etiqueta foi gerada com caixa ${e.caixa} cm${e.peso ? ` / ${e.peso} g` : ""}` +
+        (outro.length ? ` (caixa de ${outro.join(" ou ")} ${potesTxt(outro[0])})` : "") + `; o esperado seria ${esperado} cm. Conferir antes de embalar.`);
+    }
+  }
 
   const pend = pedidos.filter((p) => !usados.has(p.numero) && STATUS_A_ENVIAR.includes(p.status.toLowerCase()));
   const ord = { ALTO: 0, MEDIO: 1, BAIXO: 2 };

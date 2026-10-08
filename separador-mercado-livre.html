@@ -123,7 +123,7 @@ td.num { text-align: right; font-family: var(--f-mono); }
   <header>
     <span class="eyebrow">Dose Primal · Expedição Mercado Livre</span>
     <h1>Separador Mercado Livre</h1>
-    <p class="lede">Solte o Excel de vendas do Mercado Livre e o PDF de etiquetas. A página recorta as etiquetas (o ML imprime 3 por folha), deixa uma por página, confere cada uma com a venda pelo código de rastreio e devolve um PDF por transportadora e por quantidade de potes, com a lista de possíveis erros.</p>
+    <p class="lede">Solte o Excel de vendas do Mercado Livre e o PDF de etiquetas. A página recorta as etiquetas (o ML imprime 3 por folha), deixa uma por página, confere cada uma com a venda pelo código de rastreio e devolve um PDF por quantidade de potes, com a lista de possíveis erros.</p>
   </header>
 
   <div class="docks">
@@ -150,7 +150,7 @@ td.num { text-align: right; font-family: var(--f-mono); }
   <div id="results" hidden class="stack" style="gap:28px">
     <section class="section">
       <div class="section-head">
-        <h2>Etiquetas por transportadora e potes</h2>
+        <h2>Etiquetas por quantidade de potes</h2>
         <button class="primary" id="btnZip">Baixar tudo (.zip)</button>
       </div>
       <div class="totals" id="totals"></div>
@@ -178,14 +178,10 @@ td.num { text-align: right; font-family: var(--f-mono); }
     </div>
     <div class="section-head"><h3 style="font-size:16px">Resultado</h3><span class="example-tag">EXEMPLO</span></div>
     <div class="stack example" aria-hidden="true">
-      <div class="carrier"><div class="carrier-name"><b>Mercado Envios</b> · 29 etiquetas · 41 potes</div>
+      <div class="carrier"><div class="carrier-name"><b>Mercado Livre</b> · 30 etiquetas · 40 potes</div>
         <div class="labels">
-          <div class="lbl"><div class="lbl-top"><span>Mercado Envios</span><span>23 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">ML_MercadoEnvios_01_pote.pdf</div></div>
-          <div class="lbl"><div class="lbl-top"><span>Mercado Envios</span><span>6 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">ML_MercadoEnvios_03_potes.pdf</div></div>
-        </div></div>
-      <div class="carrier"><div class="carrier-name"><b>J&amp;T</b> · 1 etiqueta · 1 pote</div>
-        <div class="labels">
-          <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>1 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-flag">1 PARA DESPACHAR HOJE</div><div class="lbl-meta">ML_JT_01_pote.pdf</div></div>
+          <div class="lbl"><div class="lbl-top"><span>Mercado Livre</span><span>25 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-flag">4 PARA DESPACHAR HOJE</div><div class="lbl-meta">ML_01_pote.pdf</div></div>
+          <div class="lbl"><div class="lbl-top"><span>Mercado Livre</span><span>5 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">ML_03_potes.pdf</div></div>
         </div></div>
     </div>
   </section>
@@ -429,12 +425,11 @@ function processar(envios, vendas, etiquetas, picking) {
     if (e.via === "cep+nome") add("MEDIO", e, `“${quem}”: casada só por CEP + nome (o rastreio da etiqueta não aparece no Excel).`);
     for (const s of en.vendas) if (STATUS_RUIM.test(s.status)) add("ALTO", e, `“${quem}”: venda ${s.venda} está “${s.status}” no ML.`);
     if (e.cep && en.cep && e.cep !== en.cep) add("ALTO", e, `“${quem}”: CEP da etiqueta ${e.cep} ≠ CEP no Excel ${en.cep}.`);
-    if (en.transp && en.transp !== e.transpEtiqueta) add("MEDIO", e, `“${quem}”: Excel diz ${en.transp}, a etiqueta parece ${e.transpEtiqueta}.`);
     if (en.kitDesconhecido) add("ALTO", e, `“${quem}”: não sei quantos potes tem o SKU ${en.vendas.map((s) => s.sku || "(vazio)").join(", ")}. Separada em “sem potes”.`);
     else if (!KITS.has(en.potes)) add("MEDIO", e, `“${quem}”: ${en.potes} potes não é um kit conhecido.`);
     if (en.vendas.length > 1) add("BAIXO", e, `“${quem}”: pacote com ${en.vendas.length} vendas (${en.vendas.map((s) => `${s.sku} × ${s.unid}`).join(" + ")}) = ${en.potes} potes numa etiqueta só.`);
     if (e.nome && nameSim(e.nome, en.comprador) < 0.5) add("BAIXO", e, `Quem recebe na etiqueta (“${e.nome}”) é diferente do comprador no Excel (“${en.comprador}”). Normal quando o comprador manda para outra pessoa.`);
-    if (e.diasPrazo != null && e.diasPrazo <= 0) add("ALTO", e, `“${quem}”: ${e.diasPrazo < 0 ? "despacho ATRASADO" : "despachar HOJE"} (${e.despachar})${e.transpEtiqueta === "J&T" ? ", pela J&T" : ""}.`);
+    if (e.diasPrazo != null && e.diasPrazo <= 0) add("ALTO", e, `“${quem}”: ${e.diasPrazo < 0 ? "despacho ATRASADO" : "despachar HOJE"} (${e.despachar}).`);
     const pk = pickPor.get(e.pack) || pickPor.get(e.venda) || en.vendas.map((s) => pickPor.get(s.venda)).find(Boolean);
     if (pk) {
       e.pick = pk;
@@ -454,20 +449,18 @@ function processar(envios, vendas, etiquetas, picking) {
 }
 
 /* ---------- saída ---------- */
-const ORDEM_T = ["Mercado Envios", "J&T", "Correios", "Loggi"];
-const ordT = (t) => { const i = ORDEM_T.indexOf(t); return i < 0 ? 99 : i; };
 async function montarPdfs(etiquetas) {
   const grupos = new Map();
   for (const e of etiquetas) {
-    const t = e.envio?.transp || e.transpEtiqueta;
+    // no ML tudo é coletado/despachado pelo próprio ML, então separa só por potes
     const p = e.envio && !e.envio.kitDesconhecido ? e.envio.potes : -1;
-    const k = t + "|" + p;
-    if (!grupos.has(k)) grupos.set(k, { transp: t, potes: p, ets: [] });
+    const k = String(p);
+    if (!grupos.has(k)) grupos.set(k, { transp: "Mercado Livre", potes: p, ets: [] });
     grupos.get(k).ets.push(e);
   }
   const src = await Promise.all(state.pdfs.map((f) => PDFLib.PDFDocument.load(f.buf.slice(0))));
   const out = [];
-  for (const g of [...grupos.values()].sort((a, b) => ordT(a.transp) - ordT(b.transp) || (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
+  for (const g of [...grupos.values()].sort((a, b) => (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
     const doc = await PDFLib.PDFDocument.create();
     for (const e of g.ets) {
       const [pg] = await doc.copyPages(src[e.fileIdx], [e.pageIdx]);
@@ -477,8 +470,7 @@ async function montarPdfs(etiquetas) {
       }
       doc.addPage(pg);
     }
-    const slug = g.transp.replace(/[^\w]+/g, "");
-    g.filename = `ML_${slug}_${g.potes < 0 ? "SEM_POTES" : pad2(g.potes) + "_" + potesTxt(g.potes)}.pdf`;
+    g.filename = `ML_${g.potes < 0 ? "SEM_POTES" : pad2(g.potes) + "_" + potesTxt(g.potes)}.pdf`;
     g.bytes = await doc.save();
     for (const e of g.ets) e.arquivo = g.filename;
     out.push(g);

@@ -1,0 +1,619 @@
+<title>Separador Mercado Livre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: bancada de expedição ML — coluna única; entrada (Excel + PDF) → resumo por transportadora e potes (cartões estilo etiqueta) → erros → conferência */
+:root {
+  --bg: #f3f4f2;
+  --panel: #ffffff;
+  --ink: #16191d;
+  --muted: #5d646c;
+  --line: #d9dcd8;
+  --accent: #0d6e64;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcf0ec;
+  --bad: #c3261d;   --bad-soft: #fbe7e5;
+  --warn: #a35c00;  --warn-soft: #fcefd9;
+  --ok: #1d7a3e;    --ok-soft: #e1f3e6;
+  --info: #4d5760;  --info-soft: #eceef0;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121417; --panel: #1b1e22; --ink: #eceef0; --muted: #9aa2ab; --line: #2e3339;
+  --accent: #5fd0bf; --accent-ink: #062a25; --accent-soft: #143430;
+  --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f3b35a; --warn-soft: #3a2a14;
+  --ok: #7fd49b; --ok-soft: #173222; --info: #b4bcc4; --info-soft: #262a30; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121417; --panel: #1b1e22; --ink: #eceef0; --muted: #9aa2ab; --line: #2e3339;
+  --accent: #5fd0bf; --accent-ink: #062a25; --accent-soft: #143430;
+  --bad: #ff8a80; --bad-soft: #3a1c1a; --warn: #f3b35a; --warn-soft: #3a2a14;
+  --ok: #7fd49b; --ok-soft: #173222; --info: #b4bcc4; --info-soft: #262a30; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); padding: 28px 16px 64px; }
+.wrap { width: 100%; max-width: 980px; margin: 0 auto; display: grid; gap: 28px; }
+.stack { display: grid; gap: 18px; min-width: 0; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 850; font-stretch: 85%; letter-spacing: -0.01em; line-height: 1.05; }
+h2 { font-size: 20px; font-weight: 750; font-stretch: 90%; }
+.eyebrow { font: 600 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); max-width: 62ch; margin: 8px 0 0; }
+header { display: grid; gap: 6px; }
+
+.docks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 820px) { .docks { grid-template-columns: 1fr 1fr; } #dockCsv { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .docks { grid-template-columns: 1fr; } #dockCsv { grid-column: auto; } }
+.dock { position: relative; background: var(--panel); border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; transition: border-color .15s, background .15s; }
+.dock.over { border-color: var(--accent); background: var(--accent-soft); }
+.dock.filled { border-style: solid; }
+.dock input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.dock:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dock-head { display: flex; align-items: baseline; gap: 10px; }
+.dock-num { font: 800 13px/1 var(--f-mono); color: var(--accent); }
+.dock h3 { font-size: 17px; font-weight: 700; }
+.dock .opt { margin-left: auto; font: 500 11px/1 var(--f-mono); color: var(--muted); letter-spacing: .06em; }
+.carrier-name b { color: var(--ink); }
+.dock p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; position: relative; z-index: 1; pointer-events: none; }
+.chip { font: 500 12px/1.3 var(--f-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: 600 14px/1 var(--f-body); border-radius: 8px; padding: 11px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button:hover { border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+label.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: var(--muted); cursor: pointer; }
+.status { font: 500 13px/1.4 var(--f-mono); color: var(--muted); }
+.status.err { color: var(--bad); }
+
+.section { display: grid; gap: 14px; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 10px; }
+.totals { font: 500 13px/1.4 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.totals b { color: var(--ink); }
+
+.carrier { display: grid; gap: 10px; }
+.carrier-name { font: 700 12px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.labels { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.lbl { background: var(--panel); border: 1.5px solid var(--ink); border-radius: 4px; display: grid; grid-template-rows: auto auto 1fr auto; min-width: 0; }
+.lbl-top { background: var(--ink); color: var(--bg); font: 700 10.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; padding: 6px 10px; display: flex; justify-content: space-between; gap: 8px; }
+.lbl-top span:last-child { white-space: nowrap; }
+.lbl-big { font-family: var(--f-display); font-weight: 900; font-stretch: 80%; font-size: 46px; line-height: 1; padding: 12px 10px 2px; font-variant-numeric: tabular-nums; }
+.lbl-big small { font-size: 18px; font-weight: 700; font-stretch: 90%; margin-left: 4px; }
+.lbl-meta { font: 400 12px/1.45 var(--f-mono); color: var(--muted); padding: 2px 10px 10px; }
+.lbl button { margin: 0 10px 10px; padding: 8px 10px; font-size: 13px; }
+.lbl.nomatch { border-color: var(--bad); }
+.lbl.nomatch .lbl-top { background: var(--bad); }
+
+.issues { display: grid; gap: 8px; }
+.issue { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.issue .msg { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.issue .where { font: 500 12px/1.4 var(--f-mono); color: var(--muted); display: block; }
+.pill { font: 700 10.5px/1 var(--f-mono); letter-spacing: .08em; padding: 5px 7px; border-radius: 4px; white-space: nowrap; }
+.pill.ALTO { background: var(--bad-soft); color: var(--bad); }
+.pill.MEDIO { background: var(--warn-soft); color: var(--warn); }
+.pill.BAIXO { background: var(--info-soft); color: var(--info); }
+.pill.INFO { background: var(--info-soft); color: var(--info); }
+.pill.OK { background: var(--ok-soft); color: var(--ok); }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+details > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; }
+details > div { padding: 0 14px 14px; display: grid; gap: 8px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: 600 11px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.num { text-align: right; font-family: var(--f-mono); }
+
+.howto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 680px) { .howto { grid-template-columns: 1fr; } }
+.howto div { border-top: 2px solid var(--ink); padding-top: 10px; font-size: 14px; color: var(--muted); }
+.howto b { display: block; color: var(--ink); font-family: var(--f-display); font-size: 16px; font-weight: 750; margin-bottom: 2px; }
+.example-tag { font: 700 10.5px/1 var(--f-mono); letter-spacing: .1em; color: var(--warn); background: var(--warn-soft); padding: 4px 6px; border-radius: 4px; }
+.example { opacity: .8; }
+.foot { color: var(--muted); font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.lbl-flag { font: 700 10.5px/1.2 var(--f-mono); letter-spacing: .06em; color: var(--bad); padding: 0 10px 8px; }
+.tag { font: 600 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 4px; background: var(--info-soft); color: var(--info); white-space: nowrap; }
+.tag.hoje { background: var(--bad-soft); color: var(--bad); }
+</style>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Dose Primal · Expedição Mercado Livre</span>
+    <h1>Separador Mercado Livre</h1>
+    <p class="lede">Solte o Excel de vendas do Mercado Livre e o PDF de etiquetas. A página recorta as etiquetas (o ML imprime 3 por folha), deixa uma por página, confere cada uma com a venda pelo código de rastreio e devolve um PDF por transportadora e por quantidade de potes, com a lista de possíveis erros.</p>
+  </header>
+
+  <div class="docks">
+    <div class="dock" id="dockXls">
+      <div class="dock-head"><span class="dock-num">1</span><h3>Vendas do Mercado Livre</h3></div>
+      <p>Relatório de vendas exportado do ML, em <b>.xlsx</b>.</p>
+      <div class="chips" id="chipsXls"></div>
+      <input type="file" id="inXls" accept=".xlsx,.xls" aria-label="Excel de vendas do Mercado Livre">
+    </div>
+    <div class="dock" id="dockPdf">
+      <div class="dock-head"><span class="dock-num">2</span><h3>Etiquetas do ML (PDF)</h3></div>
+      <p>O PDF de etiquetas como o ML baixa (3 por folha). Pode ter a lista de separação no final, ela é usada para conferir.</p>
+      <div class="chips" id="chipsPdf"></div>
+      <input type="file" id="inPdf" accept=".pdf,application/pdf" multiple aria-label="PDFs de etiquetas do Mercado Livre">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="btnRun" disabled>Separar etiquetas</button>
+    <button id="btnClear">Limpar</button>
+    <span class="status" id="status" role="status"></span>
+  </div>
+
+  <div id="results" hidden class="stack" style="gap:28px">
+    <section class="section">
+      <div class="section-head">
+        <h2>Etiquetas por transportadora e potes</h2>
+        <button class="primary" id="btnZip">Baixar tudo (.zip)</button>
+      </div>
+      <div class="totals" id="totals"></div>
+      <div id="groups" class="stack"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Possíveis erros</h2><span class="totals" id="issueCount"></span></div>
+      <div class="issues" id="issues"></div>
+      <details id="pendDetails"><summary id="pendSummary"></summary><div id="pending"></div></details>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Conferência etiqueta × venda</h2><button id="btnCsv">Baixar conferência (.csv)</button></div>
+      <div class="tablewrap"><table id="conf"></table></div>
+    </section>
+  </div>
+
+  <section class="section" id="intro">
+    <div class="section-head"><h2>Como funciona</h2></div>
+    <div class="howto">
+      <div><b>Recorta as etiquetas</b>Cada folha do ML tem até 3 etiquetas. Elas são recortadas pela borda e saem uma por página, no tamanho da etiqueta.</div>
+      <div><b>Casa pelo rastreio</b>O código de rastreio da etiqueta é buscado no Excel. Potes = kit do anúncio (DP-001 = 1, DP-003 = 3, DP-006 = 6) × unidades.</div>
+      <div><b>Aponta erros</b>Etiqueta sem venda, venda sem etiqueta, venda cancelada, CEP diferente, SKU diferente da lista de separação, despacho para hoje.</div>
+    </div>
+    <div class="section-head"><h3 style="font-size:16px">Resultado</h3><span class="example-tag">EXEMPLO</span></div>
+    <div class="stack example" aria-hidden="true">
+      <div class="carrier"><div class="carrier-name"><b>Mercado Envios</b> · 29 etiquetas · 41 potes</div>
+        <div class="labels">
+          <div class="lbl"><div class="lbl-top"><span>Mercado Envios</span><span>23 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-meta">ML_MercadoEnvios_01_pote.pdf</div></div>
+          <div class="lbl"><div class="lbl-top"><span>Mercado Envios</span><span>6 etiq.</span></div><div class="lbl-big">3<small>potes</small></div><div class="lbl-meta">ML_MercadoEnvios_03_potes.pdf</div></div>
+        </div></div>
+      <div class="carrier"><div class="carrier-name"><b>J&amp;T</b> · 1 etiqueta · 1 pote</div>
+        <div class="labels">
+          <div class="lbl"><div class="lbl-top"><span>J&amp;T</span><span>1 etiq.</span></div><div class="lbl-big">1<small>pote</small></div><div class="lbl-flag">1 PARA DESPACHAR HOJE</div><div class="lbl-meta">ML_JT_01_pote.pdf</div></div>
+        </div></div>
+    </div>
+  </section>
+
+  <p class="foot">Os arquivos são lidos só no seu navegador; nada é enviado para servidor nenhum.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const KITS = new Set([1, 2, 3, 4, 6, 7, 8, 9]);
+// Potes por SKU de anúncio. SKU desconhecido: tenta "N Potes" no título.
+const POTES_SKU = { "DP-001": 1, "DP-003": 3, "DP-006": 6 };
+const STATUS_RUIM = /cancel|devolu|reembols|entregue|a caminho|em tr[aâ]nsito|media[cç][aã]o|reclama/i;
+const STATUS_A_ENVIAR = /etiqueta pronta|pronto para|aguardando (a )?(coleta|despacho|envio)|imprimir/i;
+const MESES = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12 };
+const PAD = 4; // margem em pt em volta da borda da etiqueta recortada (o vão entre etiquetas é ~8,5 pt)
+const $ = (id) => document.getElementById(id);
+const state = { xls: null, pdfs: [], out: null };
+
+/* ---------- utilidades ---------- */
+const tokens = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+function nameSim(a, b) {
+  const ta = new Set(tokens(a).filter((t) => t.length > 1)), tb = new Set(tokens(b).filter((t) => t.length > 1));
+  if (!ta.size || !tb.size) return 0;
+  let c = 0; for (const t of ta) if (tb.has(t)) c++;
+  return c / Math.min(ta.size, tb.size);
+}
+const onlyDigits = (s) => String(s ?? "").replace(/\D/g, "");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const potesTxt = (n) => (n === 1 ? "pote" : "potes");
+const pad2 = (n) => String(n).padStart(2, "0");
+const normCol = (s) => tokens(s).join(" ");
+function transpCurta(s) {
+  if (!s) return "";
+  if (/j&t|j ?& ?t|jet ?hub/i.test(s)) return "J&T";
+  if (/mercado ?envios/i.test(s)) return "Mercado Envios";
+  if (/correios/i.test(s)) return "Correios";
+  if (/loggi/i.test(s)) return "Loggi";
+  return s.trim();
+}
+function potesDoAnuncio(sku, titulo) {
+  const k = String(sku || "").trim().toUpperCase();
+  if (k in POTES_SKU) return POTES_SKU[k];
+  const t = String(titulo || "").match(/(\d+)\s*potes?\b/i);
+  if (t) return parseInt(t[1], 10);
+  const d = k.match(/(\d+)\s*$/);
+  return d ? parseInt(d[1], 10) : null;
+}
+
+/* ---------- Excel de vendas ---------- */
+function lerVendas(buf) {
+  const wb = XLSX.read(buf, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+  const hi = rows.findIndex((r) => r.some((c) => normCol(c) === "n o de venda" || normCol(c) === "n de venda"));
+  if (hi < 0) throw new Error("O Excel não parece ser o relatório de vendas do Mercado Livre (falta a coluna “N.º de venda”).");
+  const head = rows[hi].map(normCol);
+  const col = (name, after = -1) => head.findIndex((h, i) => i > after && h === normCol(name));
+  const C = {
+    venda: head.findIndex((h) => h === "n o de venda" || h === "n de venda"),
+    data: col("Data de venda"), status: col("Estado"), desc: col("Descrição do status"),
+    unid: col("Unidades"), sku: col("SKU"), titulo: col("Título do anúncio"), comprador: col("Comprador"),
+    cep: col("CEP"), cidade: col("Cidade"), transp: col("Transportador"), rast: col("Número de rastreamento"),
+  };
+  C.uf = col("Estado", C.cidade);
+  const v = (r, k) => (C[k] >= 0 ? String(r[C[k]] ?? "").trim() : "");
+  const vendas = [];
+  for (const r of rows.slice(hi + 1)) {
+    const venda = onlyDigits(v(r, "venda"));
+    if (!venda) continue;
+    const unid = parseInt(String(v(r, "unid")).replace(",", "."), 10) || 1;
+    const kit = potesDoAnuncio(v(r, "sku"), v(r, "titulo"));
+    const rast = v(r, "rast");
+    vendas.push({
+      venda, data: v(r, "data").replace(/\s*hs\.?$/, ""), status: v(r, "status"), unid, sku: v(r, "sku"), titulo: v(r, "titulo"),
+      kit, potes: kit == null ? null : kit * unid, comprador: v(r, "comprador"), cep: onlyDigits(v(r, "cep")).padStart(8, "0"),
+      cidade: v(r, "cidade"), uf: v(r, "uf"), transp: transpCurta(v(r, "transp")), rast, rastDig: (rast.match(/\d{8,}/) || [""])[0],
+    });
+  }
+  if (!vendas.length) throw new Error("Não encontrei vendas no Excel.");
+  // um envio = vendas que saem na mesma etiqueta (mesmo rastreio)
+  const envios = new Map();
+  for (const s of vendas) {
+    const k = s.rastDig || "venda:" + s.venda;
+    if (!envios.has(k)) envios.set(k, { key: k, rastDig: s.rastDig, rast: s.rast, vendas: [], potes: 0, kitDesconhecido: false });
+    const e = envios.get(k);
+    e.vendas.push(s);
+    if (s.potes == null) e.kitDesconhecido = true; else e.potes += s.potes;
+  }
+  for (const e of envios.values()) {
+    const s0 = e.vendas[0];
+    Object.assign(e, { comprador: s0.comprador, cep: s0.cep, cidade: s0.cidade, uf: s0.uf, transp: s0.transp, status: s0.status, data: s0.data });
+  }
+  return { vendas, envios: [...envios.values()] };
+}
+
+/* ---------- PDF: caixas das etiquetas + texto ---------- */
+function mult(m, n) { // m × n (matrizes PDF [a b c d e f])
+  return [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
+    m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+}
+async function caixasDaPagina(page) {
+  const O = pdfjsLib.OPS, ops = await page.getOperatorList();
+  const [, , pw, ph] = page.view;
+  let ctm = [1, 0, 0, 1, 0, 0]; const stack = []; const rects = [];
+  const NARGS = { [O.moveTo]: 2, [O.lineTo]: 2, [O.curveTo]: 6, [O.curveTo2]: 4, [O.curveTo3]: 4, [O.closePath]: 0, [O.rectangle]: 4 };
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const fn = ops.fnArray[i], args = ops.argsArray[i];
+    if (fn === O.save) stack.push(ctm);
+    else if (fn === O.restore) ctm = stack.pop() || [1, 0, 0, 1, 0, 0];
+    else if (fn === O.transform) ctm = mult(args, ctm);
+    else if (fn === O.constructPath) {
+      const [sub, coords] = args; let k = 0;
+      for (const op of sub) {
+        if (op === O.rectangle) {
+          const [x, y, w, h] = coords.slice(k, k + 4);
+          const pts = [[x, y], [x + w, y + h]].map(([px, py]) => [ctm[0] * px + ctm[2] * py + ctm[4], ctm[1] * px + ctm[3] * py + ctm[5]]);
+          const r = { x0: Math.min(pts[0][0], pts[1][0]), y0: Math.min(pts[0][1], pts[1][1]), x1: Math.max(pts[0][0], pts[1][0]), y1: Math.max(pts[0][1], pts[1][1]) };
+          const w2 = r.x1 - r.x0, h2 = r.y1 - r.y0;
+          if (w2 >= 150 && h2 >= 200 && w2 < pw * 0.9) rects.push(r);
+        }
+        k += NARGS[op] ?? 0;
+      }
+    }
+  }
+  // remove contornos repetidos (o ML desenha a borda 2–3 vezes) e fica com a maior
+  const out = [];
+  for (const r of rects.sort((a, b) => (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0))) {
+    if (!out.some((o) => r.x0 >= o.x0 - 3 && r.x1 <= o.x1 + 3 && r.y0 >= o.y0 - 3 && r.y1 <= o.y1 + 3)) out.push(r);
+  }
+  return out.sort((a, b) => b.y1 - a.y1 || a.x0 - b.x0); // de cima para baixo, da esquerda para a direita
+}
+function linhasDe(items, box) {
+  const rows = [];
+  for (const it of items) {
+    const x = it.transform[4], y = it.transform[5];
+    if (box && (x < box.x0 - 1 || x > box.x1 + 1 || y < box.y0 - 1 || y > box.y1 + 1)) continue;
+    let r = rows.find((r) => Math.abs(r.y - y) <= 2.5);
+    if (!r) rows.push((r = { y, parts: [] }));
+    r.parts.push({ x, w: it.width || 0, s: it.str });
+  }
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map((r) => {
+    const ps = r.parts.sort((a, b) => a.x - b.x); let line = "", end = -1e9;
+    for (const p of ps) { line += (line && p.x - end > 1.5 ? " " : "") + p.s; end = p.x + p.w; }
+    return line.replace(/\s+/g, " ").trim();
+  }).filter(Boolean);
+}
+async function lerPdf(file, fileIdx) {
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+  const etiquetas = [], picking = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const items = (await page.getTextContent()).items.filter((it) => it.str && it.str.trim());
+    const all = linhasDe(items).join("\n");
+    if (/Identifi+ca[cç][aã]o/i.test(all) && /SKU:/i.test(all)) { picking.push(...lerPicking(linhasDe(items))); continue; }
+    let boxes = await caixasDaPagina(page);
+    if (!boxes.length) { const [x0, y0, x1, y1] = page.view; boxes = [{ x0, y0, x1, y1, inteira: true }]; }
+    boxes.forEach((box, j) => {
+      const lines = linhasDe(items, box);
+      if (lines.length < 3) return; // caixa sem conteúdo
+      etiquetas.push(parseEtiqueta(lines, { fileName: file.name, fileIdx, pageIdx: i - 1, pos: j + 1, nPos: boxes.length, box }));
+    });
+  }
+  return { buf, etiquetas, picking };
+}
+function lerPicking(lines) {
+  // a lista tem duas colunas (identificação | produto) na mesma linha: lê os campos na ordem em que aparecem
+  const out = []; let cur = {};
+  for (const m of lines.join("\n").matchAll(/(Pack ID|Venda|SKU|Quantidade):\s*([^\s][^\n]*?)(?=\s+(?:Pack ID|Venda|SKU|Quantidade|Sabor):|\n|$)/gi)) {
+    const k = m[1].toLowerCase(), v = m[2].trim();
+    if ((k === "pack id" || k === "venda") && cur.sku && cur.qtd != null) { out.push(cur); cur = {}; }
+    if (k === "pack id") cur.pack = onlyDigits(v);
+    else if (k === "venda") cur.venda = onlyDigits(v);
+    else if (k === "sku") cur.sku = v;
+    else cur.qtd = parseInt(v, 10) || 1;
+  }
+  if (cur.sku) out.push(cur);
+  return out;
+}
+function parseEtiqueta(lines, base) {
+  const text = lines.join("\n"), flat = text.replace(/\s+/g, "");
+  const g = (re, src = text) => (src.match(re) || [])[1] || "";
+  const e = { ...base, lines, text, flat };
+  e.pack = g(/PackID:(\d+)/i, flat);
+  e.venda = g(/Venda:(\d+)/i, flat);
+  e.cep = onlyDigits(g(/CEP:\s*(\d{5}-?\d{3})/i));
+  e.nf = g(/NF:\s*(\d+)/i);
+  e.despachar = g(/Despachar:\s*([^\n]+)/i).trim();
+  e.retira = g(/Retira na\s+([^\n]+)/i).trim();
+  const ni = lines.findIndex((l) => /\([A-Z0-9_.-]{4,}\)\s*$/.test(l));
+  if (ni >= 0) {
+    const own = lines[ni].replace(/\s*\([A-Z0-9_.-]{4,}\)\s*$/, "").trim();
+    e.nome = own || (lines[ni - 1] && !/:/.test(lines[ni - 1]) ? lines[ni - 1] : "");
+  } else {
+    const ei = lines.findIndex((l) => /^Endere[cç]o:/i.test(l));
+    e.nome = ei > 0 ? lines[ei - 1] : "";
+  }
+  e.transpEtiqueta = /JETHUB|J&T|(?<!\d)888\d{12}(?!\d)/i.test(text) ? "J&T" : "Mercado Envios";
+  const d = e.despachar.match(/(\d{1,2})\s*\/\s*([a-zç]{3})/i);
+  if (d && MESES[d[2].toLowerCase()]) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    let dt = new Date(hoje.getFullYear(), MESES[d[2].toLowerCase()] - 1, parseInt(d[1], 10));
+    if (dt - hoje > 180 * 864e5) dt.setFullYear(dt.getFullYear() - 1);
+    if (hoje - dt > 180 * 864e5) dt.setFullYear(dt.getFullYear() + 1);
+    e.diasPrazo = Math.round((dt - hoje) / 864e5);
+  }
+  return e;
+}
+
+/* ---------- casamento + verificação ---------- */
+function processar(envios, vendas, etiquetas, picking) {
+  const porVenda = new Map();
+  for (const en of envios) for (const s of en.vendas) porVenda.set(s.venda, en);
+  for (const e of etiquetas) {
+    e.envio = null; e.via = "";
+    const r = envios.find((en) => en.rastDig && e.flat.includes(en.rastDig));
+    if (r) { e.envio = r; e.via = "rastreio"; continue; }
+    const id = (e.pack && porVenda.get(e.pack)) || (e.venda && porVenda.get(e.venda));
+    if (id) { e.envio = id; e.via = "venda"; continue; }
+    const cands = envios.filter((en) => en.cep === e.cep).map((en) => ({ en, s: nameSim(e.nome, en.comprador) })).filter((c) => c.s >= 0.5).sort((a, b) => b.s - a.s);
+    if (cands.length) { e.envio = cands[0].en; e.via = "cep+nome"; }
+  }
+  const issues = [];
+  const where = (e) => `folha ${e.pageIdx + 1}${e.nPos > 1 ? `, etiqueta ${e.pos} de ${e.nPos}` : ""}${state.pdfs.length > 1 ? ` · ${e.fileName}` : ""}`;
+  const add = (g, e, msg) => issues.push({ g, e, msg, where: e ? where(e) : "geral" });
+  const usados = new Map();
+  const pickPor = new Map();
+  for (const p of picking) { if (p.venda) pickPor.set(p.venda, p); if (p.pack) pickPor.set(p.pack, p); }
+
+  for (const e of etiquetas) {
+    const en = e.envio, quem = e.nome || en?.comprador || "etiqueta";
+    if (!en) { add("ALTO", e, `Etiqueta de “${quem}” (CEP ${e.cep || "?"}) não está no Excel de vendas.`); continue; }
+    if (!usados.has(en.key)) usados.set(en.key, []);
+    usados.get(en.key).push(e);
+    if (e.via === "cep+nome") add("MEDIO", e, `“${quem}”: casada só por CEP + nome (o rastreio da etiqueta não aparece no Excel).`);
+    for (const s of en.vendas) if (STATUS_RUIM.test(s.status)) add("ALTO", e, `“${quem}”: venda ${s.venda} está “${s.status}” no ML.`);
+    if (e.cep && en.cep && e.cep !== en.cep) add("ALTO", e, `“${quem}”: CEP da etiqueta ${e.cep} ≠ CEP no Excel ${en.cep}.`);
+    if (en.transp && en.transp !== e.transpEtiqueta) add("MEDIO", e, `“${quem}”: Excel diz ${en.transp}, a etiqueta parece ${e.transpEtiqueta}.`);
+    if (en.kitDesconhecido) add("ALTO", e, `“${quem}”: não sei quantos potes tem o SKU ${en.vendas.map((s) => s.sku || "(vazio)").join(", ")}. Separada em “sem potes”.`);
+    else if (!KITS.has(en.potes)) add("MEDIO", e, `“${quem}”: ${en.potes} potes não é um kit conhecido.`);
+    if (en.vendas.length > 1) add("BAIXO", e, `“${quem}”: pacote com ${en.vendas.length} vendas (${en.vendas.map((s) => `${s.sku} × ${s.unid}`).join(" + ")}) = ${en.potes} potes numa etiqueta só.`);
+    if (e.nome && nameSim(e.nome, en.comprador) < 0.5) add("BAIXO", e, `Quem recebe na etiqueta (“${e.nome}”) é diferente do comprador no Excel (“${en.comprador}”). Normal quando o comprador manda para outra pessoa.`);
+    if (e.diasPrazo != null && e.diasPrazo <= 0) add("ALTO", e, `“${quem}”: ${e.diasPrazo < 0 ? "despacho ATRASADO" : "despachar HOJE"} (${e.despachar})${e.transpEtiqueta === "J&T" ? ", pela J&T" : ""}.`);
+    const pk = pickPor.get(e.pack) || pickPor.get(e.venda) || en.vendas.map((s) => pickPor.get(s.venda)).find(Boolean);
+    if (pk) {
+      e.pick = pk;
+      const ps = potesDoAnuncio(pk.sku, "") * (pk.qtd || 1);
+      if (!en.kitDesconhecido && ps && ps !== en.potes) add("ALTO", e, `“${quem}”: Excel diz ${en.potes} ${potesTxt(en.potes)}, mas a lista de separação do PDF diz ${pk.sku} × ${pk.qtd} = ${ps} ${potesTxt(ps)}.`);
+    }
+  }
+  const porRast = new Map();
+  for (const e of etiquetas) if (e.envio) { const k = e.envio.key; if (!porRast.has(k)) porRast.set(k, []); porRast.get(k).push(e); }
+  for (const [, es] of porRast) if (es.length > 1)
+    add("ALTO", es[0], `A mesma venda (${es[0].envio.vendas.map((s) => s.venda).join(", ")}, ${es[0].envio.comprador}) tem ${es.length} etiquetas: ${es.map(where).join("; ")}. Imprimir só uma.`);
+
+  const pend = envios.filter((en) => !usados.has(en.key) && en.vendas.some((s) => STATUS_A_ENVIAR.test(s.status)));
+  const ord = { ALTO: 0, MEDIO: 1, BAIXO: 2 };
+  issues.sort((a, b) => ord[a.g] - ord[b.g] || (a.e ? a.e.fileIdx * 1e4 + a.e.pageIdx * 10 + a.e.pos : 0) - (b.e ? b.e.fileIdx * 1e4 + b.e.pageIdx * 10 + b.e.pos : 0));
+  return { issues, pend };
+}
+
+/* ---------- saída ---------- */
+const ORDEM_T = ["Mercado Envios", "J&T", "Correios", "Loggi"];
+const ordT = (t) => { const i = ORDEM_T.indexOf(t); return i < 0 ? 99 : i; };
+async function montarPdfs(etiquetas) {
+  const grupos = new Map();
+  for (const e of etiquetas) {
+    const t = e.envio?.transp || e.transpEtiqueta;
+    const p = e.envio && !e.envio.kitDesconhecido ? e.envio.potes : -1;
+    const k = t + "|" + p;
+    if (!grupos.has(k)) grupos.set(k, { transp: t, potes: p, ets: [] });
+    grupos.get(k).ets.push(e);
+  }
+  const src = await Promise.all(state.pdfs.map((f) => PDFLib.PDFDocument.load(f.buf.slice(0))));
+  const out = [];
+  for (const g of [...grupos.values()].sort((a, b) => ordT(a.transp) - ordT(b.transp) || (a.potes < 0) - (b.potes < 0) || a.potes - b.potes)) {
+    const doc = await PDFLib.PDFDocument.create();
+    for (const e of g.ets) {
+      const [pg] = await doc.copyPages(src[e.fileIdx], [e.pageIdx]);
+      if (!e.box.inteira) {
+        const b = e.box, x = b.x0 - PAD, y = b.y0 - PAD, w = b.x1 - b.x0 + 2 * PAD, h = b.y1 - b.y0 + 2 * PAD;
+        pg.setMediaBox(x, y, w, h); pg.setCropBox(x, y, w, h);
+      }
+      doc.addPage(pg);
+    }
+    const slug = g.transp.replace(/[^\w]+/g, "");
+    g.filename = `ML_${slug}_${g.potes < 0 ? "SEM_POTES" : pad2(g.potes) + "_" + potesTxt(g.potes)}.pdf`;
+    g.bytes = await doc.save();
+    for (const e of g.ets) e.arquivo = g.filename;
+    out.push(g);
+  }
+  return out;
+}
+function conferenciaCsv(etiquetas) {
+  const head = ["arquivo_origem", "folha", "posicao", "nome_etiqueta", "cep", "despachar", "retira_em", "transportadora", "vendas_ml", "comprador_excel", "status_ml", "sku", "unidades", "potes", "rastreio", "casado_por", "arquivo_saida"];
+  const rows = etiquetas.map((e) => {
+    const en = e.envio;
+    return [e.fileName, e.pageIdx + 1, e.pos, e.nome, e.cep, e.despachar, e.retira, en?.transp || e.transpEtiqueta, en ? en.vendas.map((s) => s.venda).join(" + ") : "",
+      en?.comprador || "", en?.status || "", en ? en.vendas.map((s) => s.sku).join(" + ") : "", en ? en.vendas.map((s) => s.unid).join(" + ") : "",
+      en && !en.kitDesconhecido ? en.potes : "", en?.rast || "", e.via, e.arquivo];
+  });
+  return "\uFEFF" + [head, ...rows].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+}
+async function salvar(filename, data) {
+  const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (dl) {
+    try { await dl.save({ filename, data }); setStatus(`${filename} salvo.`); }
+    catch (err) {
+      const c = err?.code;
+      if (c === "declined") setStatus("Download cancelado.");
+      else if (c === "rate_limited") setStatus("Já existe um download aguardando confirmação.", true);
+      else setStatus(`Não foi possível salvar ${filename} (${c || "erro"}).`, true);
+    }
+    return;
+  }
+  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+  const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* ---------- interface ---------- */
+function setStatus(msg, err = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", err); }
+function refreshDocks() {
+  $("chipsXls").innerHTML = state.xls ? `<span class="chip">${esc(state.xls.name)} · ${state.xls.vendas.length} vendas</span>` : "";
+  $("chipsPdf").innerHTML = state.pdfs.map((f) => `<span class="chip">${esc(f.name)} · ${f.etiquetas.length} etiquetas${f.picking.length ? " + lista de separação" : ""}</span>`).join("");
+  $("dockXls").classList.toggle("filled", !!state.xls);
+  $("dockPdf").classList.toggle("filled", state.pdfs.length > 0);
+  $("btnRun").disabled = !(state.xls && state.pdfs.length);
+}
+async function addXls(file) {
+  try { state.xls = { name: file.name, ...lerVendas(await file.arrayBuffer()) }; setStatus(""); refreshDocks(); }
+  catch (e) { console.error(e); setStatus(e.message || "Não consegui ler o Excel.", true); }
+}
+async function addPdfs(files) {
+  for (const file of files) {
+    if (/\.xlsx?$/i.test(file.name)) { await addXls(file); continue; }
+    if (!/\.pdf$/i.test(file.name)) continue;
+    if (state.pdfs.some((f) => f.name === file.name && f.size === file.size)) { setStatus(`${file.name} já foi adicionado.`, true); return; }
+    setStatus(`Lendo ${file.name}…`);
+    try {
+      const r = await lerPdf(file, state.pdfs.length);
+      if (!r.etiquetas.length) { setStatus(`Não achei etiquetas em ${file.name}.`, true); return; }
+      state.pdfs.push({ name: file.name, size: file.size, ...r });
+    } catch (e) { console.error(e); setStatus(`Não consegui ler ${file.name}: ${e.message}`, true); return; }
+  }
+  setStatus(""); refreshDocks();
+}
+function wireDock(dock, input, handler) {
+  input.addEventListener("change", () => { handler([...input.files]); input.value = ""; });
+  dock.addEventListener("dragover", (e) => { e.preventDefault(); dock.classList.add("over"); });
+  dock.addEventListener("dragleave", () => dock.classList.remove("over"));
+  dock.addEventListener("drop", (e) => { e.preventDefault(); dock.classList.remove("over"); handler([...e.dataTransfer.files]); });
+}
+wireDock($("dockXls"), $("inXls"), (fs) => { const x = fs.find((f) => /\.xlsx?$/i.test(f.name)); if (x) addXls(x); const p = fs.filter((f) => /\.pdf$/i.test(f.name)); if (p.length) addPdfs(p); });
+wireDock($("dockPdf"), $("inPdf"), addPdfs);
+
+$("btnClear").onclick = () => { state.xls = null; state.pdfs = []; state.out = null; $("results").hidden = true; $("intro").hidden = false; setStatus(""); refreshDocks(); };
+$("btnRun").onclick = async () => {
+  $("btnRun").disabled = true; setStatus("Separando…");
+  try {
+    const etiquetas = state.pdfs.flatMap((f) => f.etiquetas), picking = state.pdfs.flatMap((f) => f.picking);
+    const { issues, pend } = processar(state.xls.envios, state.xls.vendas, etiquetas, picking);
+    const grupos = await montarPdfs(etiquetas);
+    state.out = { etiquetas, issues, pend, grupos };
+    render();
+    setStatus(`${etiquetas.length} etiquetas recortadas e separadas em ${grupos.length} arquivos.`);
+  } catch (e) { console.error(e); setStatus("Erro ao separar: " + e.message, true); }
+  $("btnRun").disabled = false;
+};
+
+function render() {
+  const { etiquetas, issues, pend, grupos } = state.out;
+  $("intro").hidden = true; $("results").hidden = false;
+  const ok = etiquetas.filter((e) => e.envio && !e.envio.kitDesconhecido);
+  const potes = ok.reduce((s, e) => s + e.envio.potes, 0);
+  const sem = etiquetas.length - etiquetas.filter((e) => e.envio).length;
+  const hoje = etiquetas.filter((e) => e.diasPrazo != null && e.diasPrazo <= 0).length;
+  $("totals").innerHTML = `<b>${etiquetas.length}</b> etiquetas · <b>${potes}</b> potes · ${sem ? `<b>${sem}</b> sem venda` : "todas casadas com o Excel"}${hoje ? ` · <b>${hoje}</b> para despachar hoje` : ""}`;
+
+  const porT = new Map();
+  grupos.forEach((g, i) => { if (!porT.has(g.transp)) porT.set(g.transp, []); porT.get(g.transp).push([g, i]); });
+  $("groups").innerHTML = [...porT].map(([t, gs]) => {
+    const n = gs.reduce((s, [g]) => s + g.ets.length, 0), p = gs.reduce((s, [g]) => s + (g.potes > 0 ? g.potes * g.ets.length : 0), 0);
+    return `<div class="carrier"><div class="carrier-name"><b>${esc(t)}</b> · ${n} ${n === 1 ? "etiqueta" : "etiquetas"} · ${p} ${potesTxt(p)}</div><div class="labels">${gs.map(([g, i]) => {
+      const h = g.ets.filter((e) => e.diasPrazo != null && e.diasPrazo <= 0).length;
+      return `<div class="lbl ${g.potes < 0 ? "nomatch" : ""}">
+        <div class="lbl-top"><span>${esc(t)}</span><span>${g.ets.length} etiq.</span></div>
+        <div class="lbl-big">${g.potes < 0 ? "?" : g.potes}<small>${g.potes < 0 ? "sem potes" : potesTxt(g.potes)}</small></div>
+        ${h ? `<div class="lbl-flag">${h} PARA DESPACHAR HOJE</div>` : ""}
+        <div class="lbl-meta">${g.potes < 0 ? "conferir à mão" : `${g.potes * g.ets.length} ${potesTxt(g.potes * g.ets.length)} no total`}</div>
+        <button data-g="${i}">Baixar PDF</button></div>`; }).join("")}</div></div>`;
+  }).join("");
+  $("groups").querySelectorAll("button[data-g]").forEach((b) => b.onclick = () => { const g = grupos[+b.dataset.g]; salvar(g.filename, new Blob([g.bytes], { type: "application/pdf" })); });
+
+  const n = { ALTO: 0, MEDIO: 0, BAIXO: 0 }; issues.forEach((i) => n[i.g]++);
+  $("issueCount").textContent = issues.length ? `${n.ALTO} alto · ${n.MEDIO} médio · ${n.BAIXO} baixo` : "";
+  $("issues").innerHTML = issues.length ? issues.map((i) => `<div class="issue"><span class="pill ${i.g}">${i.g === "MEDIO" ? "MÉDIO" : i.g}</span><div class="msg">${esc(i.msg)}<span class="where">${esc(i.where)}</span></div></div>`).join("")
+    : `<div class="issue"><span class="pill OK">OK</span><div class="msg">Nenhum problema encontrado nas etiquetas.</div></div>`;
+  $("pendDetails").hidden = !pend.length;
+  $("pendSummary").textContent = `${pend.length} ${pend.length === 1 ? "venda com etiqueta pronta no ML que não está" : "vendas com etiqueta pronta no ML que não estão"} neste PDF`;
+  $("pending").innerHTML = `<div class="tablewrap"><table><thead><tr><th>Data</th><th>Comprador</th><th>CEP</th><th>Potes</th><th>Transp.</th><th>Status</th><th>Venda</th></tr></thead><tbody>${
+    pend.map((en) => `<tr><td>${esc(en.data)}</td><td>${esc(en.comprador)}</td><td>${esc(en.cep)}</td><td class="num">${en.kitDesconhecido ? "?" : en.potes}</td><td>${esc(en.transp)}</td><td>${esc(en.status)}</td><td>${esc(en.vendas.map((s) => s.venda).join(" + "))}</td></tr>`).join("")}</tbody></table></div>`;
+
+  $("conf").innerHTML = `<thead><tr><th>Folha</th><th>Etiqueta</th><th>CEP</th><th>Despachar</th><th>Transp.</th><th>Venda ML</th><th>SKU</th><th>Potes</th><th>Retira em</th></tr></thead><tbody>${
+    etiquetas.map((e) => { const en = e.envio; return `<tr><td>${e.pageIdx + 1}${e.nPos > 1 ? "." + e.pos : ""}</td><td>${esc(e.nome || en?.comprador || "")}</td><td>${esc(e.cep)}</td>
+      <td>${e.despachar ? `<span class="tag ${e.diasPrazo != null && e.diasPrazo <= 0 ? "hoje" : ""}">${esc(e.despachar)}</span>` : ""}</td><td>${esc(en?.transp || e.transpEtiqueta)}</td>
+      <td>${en ? esc(en.vendas.map((s) => s.venda).join(" + ")) : '<span class="pill ALTO">SEM VENDA</span>'}</td><td>${en ? esc(en.vendas.map((s) => `${s.sku}${s.unid > 1 ? " ×" + s.unid : ""}`).join(" + ")) : ""}</td>
+      <td class="num">${en && !en.kitDesconhecido ? en.potes : ""}</td><td>${esc(e.retira)}</td></tr>`; }).join("")}</tbody>`;
+}
+
+$("btnZip").onclick = async () => {
+  const zip = new JSZip();
+  for (const g of state.out.grupos) zip.file(g.filename, g.bytes);
+  zip.file("conferencia_ml.csv", conferenciaCsv(state.out.etiquetas));
+  const rel = ["POSSÍVEIS ERROS", ...state.out.issues.map((i) => `[${i.g}] ${i.where}: ${i.msg}`), "", "VENDAS COM ETIQUETA PRONTA FORA DESTE PDF",
+    ...state.out.pend.map((en) => `${en.data} ${en.comprador} (${en.kitDesconhecido ? "?" : en.potes} potes, ${en.transp}) venda ${en.vendas.map((s) => s.venda).join(" + ")}`)].join("\r\n");
+  zip.file("relatorio_ml.txt", "\uFEFF" + rel);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const d = new Date();
+  salvar(`etiquetas_ML_${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}.zip`, blob);
+};
+$("btnCsv").onclick = () => salvar("conferencia_ml.csv", conferenciaCsv(state.out.etiquetas));
+refreshDocks();
+</script>

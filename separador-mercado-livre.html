@@ -401,6 +401,8 @@ function parseEtiqueta(lines, base) {
 function processar(envios, vendas, etiquetas, picking) {
   const porVenda = new Map();
   for (const en of envios) for (const s of en.vendas) porVenda.set(s.venda, en);
+  const pickPor = new Map();
+  for (const p of picking) { if (p.venda) pickPor.set(p.venda, p); if (p.pack) pickPor.set(p.pack, p); }
   for (const e of etiquetas) {
     e.envio = null; e.via = "";
     const r = envios.find((en) => en.rastDig && e.flat.includes(en.rastDig));
@@ -408,20 +410,28 @@ function processar(envios, vendas, etiquetas, picking) {
     const id = (e.pack && porVenda.get(e.pack)) || (e.venda && porVenda.get(e.venda));
     if (id) { e.envio = id; e.via = "venda"; continue; }
     const cands = envios.filter((en) => en.cep === e.cep).map((en) => ({ en, s: nameSim(e.nome, en.comprador) })).filter((c) => c.s >= 0.5).sort((a, b) => b.s - a.s);
-    if (cands.length) { e.envio = cands[0].en; e.via = "cep+nome"; }
+    if (cands.length) { e.envio = cands[0].en; e.via = "cep+nome"; continue; }
+    // venda mais nova que o Excel: usa a lista de separação do próprio PDF
+    const pk = pickPor.get(e.pack) || pickPor.get(e.venda);
+    const kit = pk && potesDoAnuncio(pk.sku, "");
+    if (kit) {
+      const unid = pk.qtd || 1;
+      e.envio = { key: "pick:" + (pk.pack || pk.venda), rastDig: "", rast: "", comprador: e.nome, cep: e.cep, transp: e.transpEtiqueta, status: "", data: "",
+        vendas: [{ venda: pk.venda || pk.pack, sku: pk.sku, unid, status: "", potes: kit * unid }], potes: kit * unid, kitDesconhecido: false, foraExcel: true };
+      e.via = "lista de separação";
+    }
   }
   const issues = [];
   const where = (e) => `folha ${e.pageIdx + 1}${e.nPos > 1 ? `, etiqueta ${e.pos} de ${e.nPos}` : ""}${state.pdfs.length > 1 ? ` · ${e.fileName}` : ""}`;
   const add = (g, e, msg) => issues.push({ g, e, msg, where: e ? where(e) : "geral" });
   const usados = new Map();
-  const pickPor = new Map();
-  for (const p of picking) { if (p.venda) pickPor.set(p.venda, p); if (p.pack) pickPor.set(p.pack, p); }
 
   for (const e of etiquetas) {
     const en = e.envio, quem = e.nome || en?.comprador || "etiqueta";
     if (!en) { add("ALTO", e, `Etiqueta de “${quem}” (CEP ${e.cep || "?"}) não está no Excel de vendas.`); continue; }
     if (!usados.has(en.key)) usados.set(en.key, []);
     usados.get(en.key).push(e);
+    if (en.foraExcel) add("MEDIO", e, `“${quem}”: venda ${en.vendas[0].venda} não está no Excel (provavelmente vendida depois da exportação). Potes pela lista de separação do PDF: ${en.vendas[0].sku} × ${en.vendas[0].unid} = ${en.potes} ${potesTxt(en.potes)}.`);
     if (e.via === "cep+nome") add("MEDIO", e, `“${quem}”: casada só por CEP + nome (o rastreio da etiqueta não aparece no Excel).`);
     for (const s of en.vendas) if (STATUS_RUIM.test(s.status)) add("ALTO", e, `“${quem}”: venda ${s.venda} está “${s.status}” no ML.`);
     if (e.cep && en.cep && e.cep !== en.cep) add("ALTO", e, `“${quem}”: CEP da etiqueta ${e.cep} ≠ CEP no Excel ${en.cep}.`);
@@ -509,7 +519,7 @@ async function salvar(filename, data) {
 function setStatus(msg, err = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", err); }
 function refreshDocks() {
   $("chipsXls").innerHTML = state.xls ? `<span class="chip">${esc(state.xls.name)} · ${state.xls.vendas.length} vendas</span>` : "";
-  $("chipsPdf").innerHTML = state.pdfs.map((f) => `<span class="chip">${esc(f.name)} · ${f.etiquetas.length} etiquetas${f.picking.length ? " + lista de separação" : ""}</span>`).join("");
+  $("chipsPdf").innerHTML = state.pdfs.map((f) => `<span class="chip">${esc(f.name)} · ${f.etiquetas.length} ${f.etiquetas.length === 1 ? "etiqueta" : "etiquetas"}${f.picking.length ? " + lista de separação" : ""}</span>`).join("");
   $("dockXls").classList.toggle("filled", !!state.xls);
   $("dockPdf").classList.toggle("filled", state.pdfs.length > 0);
   $("btnRun").disabled = !(state.xls && state.pdfs.length);
@@ -550,7 +560,7 @@ $("btnRun").onclick = async () => {
     const grupos = await montarPdfs(etiquetas);
     state.out = { etiquetas, issues, pend, grupos };
     render();
-    setStatus(`${etiquetas.length} etiquetas recortadas e separadas em ${grupos.length} arquivos.`);
+    setStatus(`${etiquetas.length} ${etiquetas.length === 1 ? "etiqueta recortada e separada" : "etiquetas recortadas e separadas"} em ${grupos.length} ${grupos.length === 1 ? "arquivo" : "arquivos"}.`);
   } catch (e) { console.error(e); setStatus("Erro ao separar: " + e.message, true); }
   $("btnRun").disabled = false;
 };
@@ -562,7 +572,8 @@ function render() {
   const potes = ok.reduce((s, e) => s + e.envio.potes, 0);
   const sem = etiquetas.length - etiquetas.filter((e) => e.envio).length;
   const hoje = etiquetas.filter((e) => e.diasPrazo != null && e.diasPrazo <= 0).length;
-  $("totals").innerHTML = `<b>${etiquetas.length}</b> etiquetas · <b>${potes}</b> potes · ${sem ? `<b>${sem}</b> sem venda` : "todas casadas com o Excel"}${hoje ? ` · <b>${hoje}</b> para despachar hoje` : ""}`;
+  const fora = etiquetas.filter((e) => e.envio?.foraExcel).length;
+  $("totals").innerHTML = `<b>${etiquetas.length}</b> ${etiquetas.length === 1 ? "etiqueta" : "etiquetas"} · <b>${potes}</b> potes · ${sem ? `<b>${sem}</b> sem venda` : fora ? `<b>${fora}</b> fora do Excel (potes pela lista de separação)` : "todas casadas com o Excel"}${hoje ? ` · <b>${hoje}</b> para despachar hoje` : ""}`;
 
   const porT = new Map();
   grupos.forEach((g, i) => { if (!porT.has(g.transp)) porT.set(g.transp, []); porT.get(g.transp).push([g, i]); });
